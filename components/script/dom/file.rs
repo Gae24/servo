@@ -94,6 +94,10 @@ impl File {
     pub fn name(&self) -> &DOMString {
         &self.name
     }
+
+    pub fn file_type(&self) -> String {
+        self.blob.type_string()
+    }
 }
 
 impl FileMethods for File {
