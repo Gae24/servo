@@ -64,11 +64,8 @@ impl DataTransfer {
         window: &Window,
         proto: Option<HandleObject>,
         can_gc: CanGc,
+        data_store: Rc<RefCell<Option<DragDataStore>>>,
     ) -> DomRoot<DataTransfer> {
-        let mut drag_data_store = DragDataStore::new();
-        drag_data_store.set_mode(Mode::ReadWrite);
-
-        let data_store = Rc::new(RefCell::new(Some(drag_data_store)));
         let item_list = DataTransferItemList::new(window, Rc::clone(&data_store));
 
         reflect_dom_object_with_proto(
@@ -77,6 +74,20 @@ impl DataTransfer {
             proto,
             can_gc,
         )
+    }
+
+    pub fn new(
+        window: &Window,
+        data_store: Rc<RefCell<Option<DragDataStore>>>,
+    ) -> DomRoot<DataTransfer> {
+        Self::new_with_proto(window, None, CanGc::note(), data_store)
+    }
+
+    pub fn set_as_read_only(&self) {
+        self.data_store
+            .borrow_mut()
+            .as_mut()
+            .map(|data_store| data_store.set_mode(Mode::ReadOnly));
     }
 }
 
@@ -87,7 +98,12 @@ impl DataTransferMethods<crate::DomTypeHolder> for DataTransfer {
         proto: Option<HandleObject>,
         can_gc: CanGc,
     ) -> DomRoot<DataTransfer> {
-        DataTransfer::new_with_proto(window, proto, can_gc)
+        let mut drag_data_store = DragDataStore::new();
+        drag_data_store.set_mode(Mode::ReadWrite);
+
+        let data_store = Rc::new(RefCell::new(Some(drag_data_store)));
+
+        DataTransfer::new_with_proto(window, proto, can_gc, data_store)
     }
 
     /// <https://html.spec.whatwg.org/multipage/#dom-datatransfer-dropeffect>
