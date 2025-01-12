@@ -67,6 +67,18 @@ impl Blob {
         }
     }
 
+    #[allow(crown::unrooted_must_root)]
+    pub(crate) fn from_tracked_data(blob_id: BlobId) -> Blob {
+        Blob {
+            reflector_: Reflector::new(),
+            blob_id,
+        }
+    }
+
+    pub(crate) fn blob_id(&self) -> BlobId {
+        self.blob_id
+    }
+
     /// Get a slice to inner data, this might incur synchronous read and caching
     pub(crate) fn get_bytes(&self) -> Result<Vec<u8>, ()> {
         self.global().get_blob_bytes(&self.blob_id)

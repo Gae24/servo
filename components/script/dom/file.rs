@@ -4,6 +4,7 @@
 
 use std::time::SystemTime;
 
+use base::id::BlobId;
 use dom_struct::dom_struct;
 use js::rust::HandleObject;
 use net_traits::filemanager_thread::SelectedFile;
@@ -70,6 +71,23 @@ impl File {
         file
     }
 
+    pub(crate) fn from_tracked_file(
+        global: &GlobalScope,
+        name: DOMString,
+        blob_id: BlobId,
+    ) -> DomRoot<File> {
+        reflect_dom_object_with_proto(
+            Box::new(File {
+                blob: Blob::from_tracked_data(blob_id),
+                name,
+                modified: SystemTime::now(),
+            }),
+            global,
+            None,
+            CanGc::note(),
+        )
+    }
+
     // Construct from selected file message from file manager thread
     pub(crate) fn new_from_selected(
         window: &Window,
@@ -107,6 +125,10 @@ impl File {
 
     pub(crate) fn file_type(&self) -> String {
         self.blob.type_string()
+    }
+
+    pub(crate) fn blob_id(&self) -> BlobId {
+        self.blob.blob_id()
     }
 }
 

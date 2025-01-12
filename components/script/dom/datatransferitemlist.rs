@@ -142,6 +142,7 @@ impl DataTransferItemListMethods<crate::DomTypeHolder> for DataTransferItemList 
         let binary = Binary::new(
             data.file_bytes().unwrap_or_default(),
             data.name().clone(),
+            data.blob_id(),
             type_,
         );
 

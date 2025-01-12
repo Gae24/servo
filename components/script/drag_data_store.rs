@@ -4,15 +4,14 @@
 
 use std::sync::Arc;
 
+use base::id::BlobId;
 use pixels::Image;
-use script_traits::serializable::BlobImpl;
 
 use crate::dom::bindings::error::{Error, Fallible};
 use crate::dom::bindings::root::DomRoot;
 use crate::dom::bindings::str::DOMString;
 use crate::dom::file::File;
 use crate::dom::globalscope::GlobalScope;
-use crate::script_runtime::CanGc;
 
 /// <https://html.spec.whatwg.org/multipage/#the-drag-data-item-kind>
 #[derive(Clone)]
@@ -41,12 +40,18 @@ impl PlainString {
 pub(crate) struct Binary {
     bytes: Vec<u8>,
     name: DOMString,
+    blob_id: BlobId,
     type_: String,
 }
 
 impl Binary {
-    pub(crate) fn new(bytes: Vec<u8>, name: DOMString, type_: String) -> Self {
-        Self { bytes, name, type_ }
+    pub(crate) fn new(bytes: Vec<u8>, name: DOMString, blob_id: BlobId, type_: String) -> Self {
+        Self {
+            bytes,
+            name,
+            blob_id,
+            type_,
+        }
     }
 }
 
@@ -70,12 +75,10 @@ impl Kind {
     pub(crate) fn as_file(&self, global: &GlobalScope) -> Option<DomRoot<File>> {
         match self {
             Kind::Text(_) => None,
-            Kind::File(binary) => Some(File::new(
+            Kind::File(binary) => Some(File::from_tracked_file(
                 global,
-                BlobImpl::new_from_bytes(binary.bytes.clone(), binary.type_.clone()),
                 binary.name.clone(),
-                None,
-                CanGc::note(),
+                binary.blob_id,
             )),
         }
     }
