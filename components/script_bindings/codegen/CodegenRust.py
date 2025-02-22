@@ -847,7 +847,7 @@ def getJSToNativeConversionInfo(type, descriptorProvider, failureCode=None,
                 if !JS_WrapValue(*cx, valueToResolve.handle_mut()) {
                 $*{exceptionCode}
                 }
-                D::Promise::new_resolved(&promiseGlobal, cx, valueToResolve.handle())
+                D::Promise::new_resolved(&promiseGlobal, cx, valueToResolve.handle(), CanGc::note())
             }
             """,
             exceptionCode=exceptionCode)

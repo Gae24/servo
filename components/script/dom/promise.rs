@@ -153,6 +153,7 @@ impl Promise {
         global: &GlobalScope,
         cx: SafeJSContext,
         value: impl ToJSValConvertible,
+        _can_gc: CanGc,
     ) -> Rc<Promise> {
         let _ac = JSAutoRealm::new(*cx, global.reflector().get_jsobject().get());
         unsafe {
@@ -391,6 +392,7 @@ pub(crate) trait PromiseHelpers<D: crate::DomTypes> {
         global: &D::GlobalScope,
         cx: SafeJSContext,
         value: impl ToJSValConvertible,
+        can_gc: CanGc,
     ) -> Rc<D::Promise>;
 }
 
@@ -399,7 +401,8 @@ impl PromiseHelpers<crate::DomTypeHolder> for Promise {
         global: &GlobalScope,
         cx: SafeJSContext,
         value: impl ToJSValConvertible,
+        can_gc: CanGc,
     ) -> Rc<Promise> {
-        Promise::new_resolved(global, cx, value)
+        Promise::new_resolved(global, cx, value, can_gc)
     }
 }
