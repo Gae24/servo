@@ -67,7 +67,9 @@ use crate::dom::attr::{Attr, AttrHelpersForLayout};
 use crate::dom::bindings::cell::{DomRefCell, Ref, RefMut, ref_filter_map};
 use crate::dom::bindings::codegen::Bindings::AttrBinding::AttrMethods;
 use crate::dom::bindings::codegen::Bindings::DocumentBinding::DocumentMethods;
-use crate::dom::bindings::codegen::Bindings::ElementBinding::{ElementMethods, ShadowRootInit};
+use crate::dom::bindings::codegen::Bindings::ElementBinding::{
+    ElementMethods, ScrollIntoViewContainer, ScrollLogicalPosition, ShadowRootInit,
+};
 use crate::dom::bindings::codegen::Bindings::FunctionBinding::Function;
 use crate::dom::bindings::codegen::Bindings::HTMLTemplateElementBinding::HTMLTemplateElementMethods;
 use crate::dom::bindings::codegen::Bindings::NodeBinding::NodeMethods;
@@ -77,7 +79,7 @@ use crate::dom::bindings::codegen::Bindings::ShadowRootBinding::{
 use crate::dom::bindings::codegen::Bindings::WindowBinding::{
     ScrollBehavior, ScrollToOptions, WindowMethods,
 };
-use crate::dom::bindings::codegen::UnionTypes::NodeOrString;
+use crate::dom::bindings::codegen::UnionTypes::{BooleanOrScrollIntoViewOptions, NodeOrString};
 use crate::dom::bindings::conversions::DerivedFrom;
 use crate::dom::bindings::error::{Error, ErrorResult, Fallible};
 use crate::dom::bindings::inheritance::{Castable, ElementTypeId, HTMLElementTypeId, NodeTypeId};
@@ -2016,6 +2018,30 @@ impl Element {
         }
     }
 
+    /// <https://drafts.csswg.org/cssom-view/#scroll-a-target-into-view>
+    fn scroll_target_into_view(
+        &self,
+        behavior: ScrollBehavior,
+        block: ScrollLogicalPosition,
+        inline: ScrollLogicalPosition,
+        container: Option<ScrollIntoViewContainer>,
+    ) {
+        // Step 1 For each ancestor element or viewport that establishes a scrolling box scrolling box,
+        // in order of innermost to outermost scrolling box, run these substeps:
+        let node = self.upcast::<Node>();
+
+        for ancestor in node.ancestors() {}
+
+        // Step 1.1 If the Document associated with target is not same origin with the
+        // Document associated with the element or viewport associated with scrolling box, terminate these steps.
+
+        // Step 1.2 Let position be the scroll position resulting from running the steps to determine
+        // the scroll-into-view position of target with behavior as the scroll behavior,
+        // block as the block flow position, inline as the inline base direction position
+        // and scrolling box as the scrolling box.
+        todo!()
+    }
+
     // https://drafts.csswg.org/cssom-view/#dom-element-scroll
     pub(crate) fn scroll(&self, x_: f64, y_: f64, behavior: ScrollBehavior, can_gc: CanGc) {
         // Step 1.2 or 2.3
@@ -2581,6 +2607,55 @@ impl ElementMethods<crate::DomTypeHolder> for Element {
             rect.size.height.to_f64_px(),
             can_gc,
         )
+    }
+
+    /// <https://drafts.csswg.org/cssom-view/#dom-element-scrollintoview>
+    fn ScrollIntoView(&self, arg: BooleanOrScrollIntoViewOptions) {
+        // Step 1 Let behavior be "auto".
+        let mut behavior = ScrollBehavior::Auto;
+
+        // Step 2 Let block be "start".
+        let mut block = ScrollLogicalPosition::Start;
+
+        // Step 3 Let inline be "nearest".
+        let mut inline = ScrollLogicalPosition::Nearest;
+
+        // Step 4 Let container be null.
+        let mut container: Option<ScrollIntoViewContainer> = None;
+
+        match arg {
+            // Step 5
+            BooleanOrScrollIntoViewOptions::ScrollIntoViewOptions(options) => {
+                // Step 5.1 Set behavior to the behavior dictionary member of options.
+                behavior = options.parent.behavior;
+
+                // Step 5.2 Set block to the block dictionary member of options.
+                block = options.block;
+
+                // Step 5.3 Set inline to the inline dictionary member of options.
+                inline = options.inline;
+
+                // Step 5.4 If the container dictionary member of options, set container to this element.
+                container = Some(options.container);
+            },
+            BooleanOrScrollIntoViewOptions::Boolean(boolean) => {
+                // Step 6  Otherwise, if arg is false, then set block to "end".
+                if !boolean {
+                    block = ScrollLogicalPosition::End;
+                }
+            },
+        }
+
+        // Step 7 If the element does not have any associated box,
+        // or is not available to user-agent features, then return.
+        if !self.has_css_layout_box(CanGc::note()) {
+            return;
+        }
+
+        // Step 8 Scroll the element into view with behavior, block, inline, and container.
+        self.scroll_target_into_view(behavior, block, inline, container);
+
+        // Step 9 Optionally perform some other action that brings the element to the user’s attention.
     }
 
     // https://drafts.csswg.org/cssom-view/#dom-element-scroll
