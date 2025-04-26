@@ -123,7 +123,7 @@ webxr-api = { workspace = true, optional = true }
 [target.'cfg(any(target_os = "android", target_env = "ohos"))'.dependencies]
 webxr = { path = "../webxr", optional = true }
 
-[target.'cfg(not(any(target_os = "android", target_env = "ohos")))'.dependencies]
+[target.'cfg(not(any(target_env = "ohos")))'.dependencies]
 arboard = { workspace = true, optional = true }
 webxr = { path = "../webxr", features = ["ipc", "glwindow", "headless"] }
 

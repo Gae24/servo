@@ -77,7 +77,7 @@ impl ClipboardDelegate for DefaultClipboardDelegate {
 
 #[cfg(all(
     feature = "clipboard",
-    not(any(target_os = "android", target_env = "ohos"))
+    not(any(target_env = "ohos"))
 ))]
 mod clipboard {
     use std::sync::OnceLock;
@@ -121,7 +121,7 @@ mod clipboard {
     }
 }
 
-#[cfg(any(not(feature = "clipboard"), target_os = "android", target_env = "ohos"))]
+#[cfg(any(not(feature = "clipboard"), target_env = "ohos"))]
 mod clipboard {
     use super::StringRequest;
 

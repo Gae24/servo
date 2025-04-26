@@ -246,7 +246,7 @@ impl Preferences {
             devtools_server_port: 0,
             dom_abort_controller_enabled: false,
             dom_allow_scripts_to_close_windows: false,
-            dom_async_clipboard_enabled: false,
+            dom_async_clipboard_enabled: true,
             dom_bluetooth_enabled: false,
             dom_bluetooth_testing_enabled: false,
             dom_canvas_capture_enabled: false,
