@@ -1068,7 +1068,7 @@ impl HTMLFormElement {
             }
             if first {
                 if let Some(html_elem) = elem.downcast::<HTMLElement>() {
-                    html_elem.Focus(can_gc);
+                    html_elem.focusing_steps(can_gc);
                     first = false;
                 }
             }

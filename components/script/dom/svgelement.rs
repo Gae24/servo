@@ -10,6 +10,7 @@ use stylo_dom::ElementState;
 
 use crate::dom::attr::Attr;
 use crate::dom::bindings::codegen::Bindings::SVGElementBinding::SVGElementMethods;
+use crate::dom::bindings::codegen::GenericBindings::HTMLOrSVGElementBinding::FocusOptions;
 use crate::dom::bindings::inheritance::Castable;
 use crate::dom::bindings::root::{Dom, DomRoot, MutNullableDom};
 use crate::dom::cssstyledeclaration::{CSSModificationAccess, CSSStyleDeclaration, CSSStyleOwner};
@@ -128,5 +129,13 @@ impl SVGElementMethods<crate::DomTypeHolder> for SVGElement {
     fn SetAutofocus(&self, autofocus: bool, can_gc: CanGc) {
         self.element
             .set_bool_attribute(&local_name!("autofocus"), autofocus, can_gc);
+    }
+
+    // https://html.spec.whatwg.org/multipage/#dom-focus
+    fn Focus(&self, options: &FocusOptions) {
+        // TODO: Mark the element as locked for focus and run the focusing steps.
+        // https://html.spec.whatwg.org/multipage/#focusing-steps
+        //let document = self.owner_document();
+        //document.request_focus(Some(self.upcast()), FocusInitiator::Local, can_gc);
     }
 }

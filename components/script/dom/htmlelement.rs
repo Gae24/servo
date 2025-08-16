@@ -25,6 +25,7 @@ use crate::dom::bindings::codegen::Bindings::HTMLLabelElementBinding::HTMLLabelE
 use crate::dom::bindings::codegen::Bindings::NodeBinding::Node_Binding::NodeMethods;
 use crate::dom::bindings::codegen::Bindings::ShadowRootBinding::ShadowRoot_Binding::ShadowRootMethods;
 use crate::dom::bindings::codegen::Bindings::WindowBinding::WindowMethods;
+use crate::dom::bindings::codegen::GenericBindings::HTMLOrSVGElementBinding::FocusOptions;
 use crate::dom::bindings::error::{Error, ErrorResult, Fallible};
 use crate::dom::bindings::inheritance::{Castable, ElementTypeId, HTMLElementTypeId, NodeTypeId};
 use crate::dom::bindings::root::{Dom, DomRoot, MutNullableDom};
@@ -144,6 +145,71 @@ impl HTMLElement {
         // Step 2: Replace all with fragment within element.
         Node::replace_all(Some(fragment.upcast()), self.upcast::<Node>(), can_gc);
     }
+
+    /// <https://html.spec.whatwg.org/#focusing-steps>
+    pub(crate) fn focusing_steps(&self /* new focus target */, can_gc: CanGc) {
+        // Step 1 If new focus target is not a focusable area,
+        // then set new focus target to the result of getting the focusable area for new focus target,
+        // given focus trigger if it was passed.
+
+        // Step 2 If new focus target is null, then:
+        // Step 2.1 If no fallback target was specified, then return.
+        // Step 2.2 Otherwise, set new focus target to the fallback target.
+
+        // Step 3 If new focus target is a navigable container with non-null content navigable,
+        // then set new focus target to the content navigable's active document.
+
+        // Step 4 If new focus target is a focusable area and its DOM anchor is inert, then return.
+
+        // Step 5 If new focus target is the currently focused area of a top-level traversable, then return.
+
+        // Webviews are now closer to [traversable navigables](https://html.spec.whatwg.org/#traversable-navigable)
+        // or [top-level traversables](https://html.spec.whatwg.org/#top-level-traversable)
+        let top_level_traversable = self.owner_document().browsing_context().webview_id();
+
+        // Step 6 Let old chain be the current focus chain of the top-level traversable
+        // in which new focus target finds itself.
+        let old_chain = focus_chain(top_level_traversable);
+
+        // Step 7 Let new chain be the focus chain of new focus target.
+        let new_chain = focus_chain(self);
+
+        // Step 8 Run the focus update steps with old chain, new chain, and new focus target respectively.
+    }
+}
+
+/// <https://html.spec.whatwg.org/#focus-chain>
+fn focus_chain(subject: Node) {
+    // Step 1 Let output be an empty list.
+    let output = Vec::new();
+
+    // Step 2 Let currentObject be subject.
+    let mut current_object = subject;
+
+    // Step 3 While true:
+    loop {
+        // Step 3.1 Append currentObject to output.
+        output.push(current_object);
+
+        // Step 3.2 If currentObject is an area element's shape, then append that area element to output.
+        if let Some(area) = current_object.downcast::<HTMLAreaElement>() {
+            output.push(area);
+        }
+        // TODO Otherwise, if currentObject's DOM anchor is an element that is not currentObject itself,
+        // then append currentObject's DOM anchor to output.
+
+        // Step 3.3 If currentObject is a focusable area, then set currentObject
+        // to currentObject's DOM anchor's node document.
+
+        // Otherwise, if currentObject is a Document whose node navigable's parent is non-null,
+        // then set currentObject to currentObject's node navigable's parent.
+
+        // Otherwise, break.
+        break;
+    }
+
+    // Step 4 Return output.
+    output
 }
 
 impl HTMLElementMethods<crate::DomTypeHolder> for HTMLElement {
@@ -417,12 +483,17 @@ impl HTMLElementMethods<crate::DomTypeHolder> for HTMLElement {
         element.set_click_in_progress(false);
     }
 
-    // https://html.spec.whatwg.org/multipage/#dom-focus
-    fn Focus(&self, can_gc: CanGc) {
+    /// <https://html.spec.whatwg.org/multipage/#dom-focus>
+    fn Focus(&self, options: &FocusOptions, can_gc: CanGc) {
         // TODO: Mark the element as locked for focus and run the focusing steps.
         // https://html.spec.whatwg.org/multipage/#focusing-steps
         let document = self.owner_document();
         document.request_focus(Some(self.upcast()), FocusInitiator::Local, can_gc);
+
+        // Step 1 If the allow focus steps given this's node document return false, then return.
+
+        // Step 2 Run the focusing steps for this.
+        self.focusing_steps(can_gc);
     }
 
     // https://html.spec.whatwg.org/multipage/#dom-blur

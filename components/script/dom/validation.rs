@@ -75,7 +75,7 @@ pub(crate) trait Validatable {
                 validation_message_for_flags(&self.validity_state(), flags)
             );
             if let Some(html_elem) = self.as_element().downcast::<HTMLElement>() {
-                html_elem.Focus(can_gc);
+                html_elem.focusing_steps(can_gc);
             }
         }
 
