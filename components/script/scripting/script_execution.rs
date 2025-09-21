@@ -337,7 +337,6 @@ impl GlobalScope {
         &self,
         cx: &mut JSContext,
         module_tree: RootedTraceableBox<Rc<ModuleTree>>,
-        _rethrow_errors: bool,
     ) {
         // Step 1. Let settings be the settings object of script.
         // NOTE(pylbrecht): "settings" is `self` here.
@@ -384,7 +383,7 @@ impl GlobalScope {
                 ThrowOnModuleEvaluationFailure(
                     cx,
                     evaluation_promise.handle(),
-                    ModuleErrorBehaviour::ThrowModuleErrorsSync,
+                    ModuleErrorBehaviour::ReportModuleErrorsAsync,
                 )
             };
 
