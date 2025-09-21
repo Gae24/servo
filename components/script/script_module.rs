@@ -58,9 +58,7 @@ use servo_url::{ImmutableOrigin, ServoUrl};
 
 use crate::DomTypeHolder;
 use crate::dom::bindings::conversions::SafeToJSValConvertible;
-use crate::dom::bindings::error::{
-    Error, ErrorToJsval, report_pending_exception, throw_dom_exception,
-};
+use crate::dom::bindings::error::{Error, ErrorToJsval, throw_dom_exception};
 use crate::dom::bindings::inheritance::Castable;
 use crate::dom::bindings::refcounted::{Trusted, TrustedPromise};
 use crate::dom::bindings::root::DomRoot;
@@ -444,7 +442,7 @@ impl ModuleTree {
         global: &GlobalScope,
         module_record: HandleObject,
         mut eval_result: MutableHandleValue,
-    ) -> Result<(), RethrowError> {
+    ) -> Result<(), ()> {
         let mut realm = AutoRealm::new(
             cx,
             NonNull::new(global.reflector().get_jsobject().get()).unwrap(),
@@ -463,12 +461,19 @@ impl ModuleTree {
             let throw_result = ThrowOnModuleEvaluationFailure(
                 cx,
                 evaluation_promise.handle(),
-                ModuleErrorBehaviour::ThrowModuleErrorsSync,
+                ModuleErrorBehaviour::ReportModuleErrorsAsync,
             );
             if !throw_result {
                 warn!("fail to evaluate module");
 
-                Err(RethrowError::from_pending_exception(cx))
+                /*rooted!(in(*cx) let mut exception = UndefinedValue());
+                    assert!(JS_GetPendingException(*cx, exception.handle_mut()));
+                    JS_ClearPendingException(*cx);
+
+                    Err(RethrowError(RootedTraceableBox::from_box(Heap::boxed(
+                        exception.get(),
+                ))))*/
+                Err(())
             } else {
                 debug!("module evaluated successfully");
                 Ok(())
@@ -476,8 +481,8 @@ impl ModuleTree {
         }
     }
 
-    #[expect(unsafe_code)]
-    pub(crate) fn report_error(&self, cx: &mut JSContext, global: &GlobalScope) {
+    /*#[expect(unsafe_code)]
+    pub(crate) fn report_error(&self, global: &GlobalScope, can_gc: CanGc) {
         let module_error = self.rethrow_error.borrow();
 
         if let Some(exception) = &*module_error {
@@ -489,7 +494,7 @@ impl ModuleTree {
             }
             report_pending_exception(cx);
         }
-    }
+    }*/
 
     /// <https://html.spec.whatwg.org/multipage/#resolve-a-module-specifier>
     pub(crate) fn resolve_module_specifier(
