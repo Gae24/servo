@@ -840,7 +840,7 @@ impl WorkletThread {
 
                         // Step 6.4.4. Run a module script given script.
                         let module = RootedTraceableBox::new(script);
-                        rooted_global.run_a_module_script(cx, module, false);
+                        rooted_global.run_a_module_script(cx, module);
 
                         // NOTE: we are treating all negative values as -1
                         // Step 6.4.5.1. If pendingTasks is not −1:

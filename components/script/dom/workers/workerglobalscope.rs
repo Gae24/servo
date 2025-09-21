@@ -723,7 +723,7 @@ impl WorkerGlobalScope {
                     );
                 },
                 Script::Module(module_tree) => {
-                    self.globalscope.run_a_module_script(cx, module_tree, false);
+                    self.globalscope.run_a_module_script(cx, module_tree);
                 },
                 _ => unreachable!(),
             }
