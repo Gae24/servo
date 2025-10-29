@@ -102,6 +102,7 @@ use super::bindings::codegen::Bindings::MessagePortBinding::StructuredSerializeO
 use super::bindings::trace::HashMapTracedValues;
 use super::types::SVGSVGElement;
 use crate::dom::bindings::cell::{DomRefCell, Ref};
+use crate::dom::bindings::codegen::Bindings::AnimationFrameProviderBinding::FrameRequestCallback;
 use crate::dom::bindings::codegen::Bindings::DocumentBinding::{
     DocumentMethods, DocumentReadyState, NamedPropertyValue,
 };
@@ -115,8 +116,7 @@ use crate::dom::bindings::codegen::Bindings::ReportingObserverBinding::Report;
 use crate::dom::bindings::codegen::Bindings::RequestBinding::{RequestInfo, RequestInit};
 use crate::dom::bindings::codegen::Bindings::VoidFunctionBinding::VoidFunction;
 use crate::dom::bindings::codegen::Bindings::WindowBinding::{
-    self, DeferredRequestInit, FrameRequestCallback, ScrollBehavior, WindowMethods,
-    WindowPostMessageOptions,
+    self, DeferredRequestInit, ScrollBehavior, WindowMethods, WindowPostMessageOptions,
 };
 use crate::dom::bindings::codegen::UnionTypes::{
     RequestOrUSVString, TrustedScriptOrString, TrustedScriptOrStringOrFunction,

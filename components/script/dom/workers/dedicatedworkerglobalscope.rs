@@ -2,6 +2,8 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
+use std::cell::Cell;
+use std::rc::Rc;
 use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
@@ -12,6 +14,7 @@ use crossbeam_channel::{Receiver, Sender, unbounded};
 use devtools_traits::DevtoolScriptControlMsg;
 use dom_struct::dom_struct;
 use fonts::FontContext;
+use indexmap::IndexMap;
 use ipc_channel::ipc::IpcReceiver;
 use ipc_channel::router::ROUTER;
 use js::jsapi::{Heap, JSContext, JSObject};
@@ -30,6 +33,7 @@ use crate::devtools;
 use crate::dom::abstractworker::{MessageData, SimpleWorkerErrorHandler, WorkerScriptMsg};
 use crate::dom::abstractworkerglobalscope::{WorkerEventLoopMethods, run_worker_event_loop};
 use crate::dom::bindings::cell::DomRefCell;
+use crate::dom::bindings::codegen::Bindings::AnimationFrameProviderBinding::FrameRequestCallback;
 use crate::dom::bindings::codegen::Bindings::DedicatedWorkerGlobalScopeBinding;
 use crate::dom::bindings::codegen::Bindings::DedicatedWorkerGlobalScopeBinding::DedicatedWorkerGlobalScopeMethods;
 use crate::dom::bindings::codegen::Bindings::MessagePortBinding::StructuredSerializeOptions;
@@ -197,6 +201,12 @@ pub(crate) struct DedicatedWorkerGlobalScope {
     control_receiver: Receiver<DedicatedWorkerControlMsg>,
     #[no_trace]
     queued_worker_tasks: DomRefCell<Vec<MessageData>>,
+
+    /// <https://html.spec.whatwg.org/multipage/#list-of-animation-frame-callbacks>
+    #[conditional_malloc_size_of]
+    frame_callback_list: DomRefCell<IndexMap<u32, Rc<FrameRequestCallback>>>,
+    /// <https://html.spec.whatwg.org/multipage/#animation-frame-callback-identifier>
+    frame_callback_identifier: Cell<u32>,
 }
 
 impl WorkerEventLoopMethods for DedicatedWorkerGlobalScope {
@@ -287,6 +297,8 @@ impl DedicatedWorkerGlobalScope {
             browsing_context,
             control_receiver,
             queued_worker_tasks: Default::default(),
+            frame_callback_list: DomRefCell::new(IndexMap::new()),
+            frame_callback_identifier: Cell::new(0),
         }
     }
 
@@ -790,4 +802,34 @@ impl DedicatedWorkerGlobalScopeMethods<crate::DomTypeHolder> for DedicatedWorker
 
     // https://html.spec.whatwg.org/multipage/#handler-dedicatedworkerglobalscope-onmessageerror
     event_handler!(messageerror, GetOnmessageerror, SetOnmessageerror);
+
+    /// <https://html.spec.whatwg.org/multipage/#dom-animationframeprovider-requestanimationframe>
+    fn RequestAnimationFrame(&self, callback: Rc<FrameRequestCallback>) -> u32 {
+        // Step 1 If this is not supported, then throw a "NotSupportedError" DOMException.
+
+        // Step 2 Let target be this's target object.
+
+        // Step 3 Increment target's animation frame callback identifier by one, and let handle be the result.
+        self.frame_callback_identifier
+            .update(|identifier| identifier + 1);
+        let handle = self.frame_callback_identifier.get();
+
+        // Step 4 Let callbacks be target's map of animation frame callbacks.
+        // Step 5 Set callbacks[handle] to callback.
+        self.frame_callback_list
+            .borrow_mut()
+            .insert(handle, callback);
+
+        // Step 6 Return handle.
+        handle
+    }
+
+    /// <https://html.spec.whatwg.org/multipage/#dom-window-cancelanimationframe>
+    fn CancelAnimationFrame(&self, ident: u32) {
+        //  Step 1 If this is not supported, then throw a "NotSupportedError" DOMException.
+
+        // Step 2 Let callbacks be this's target object's map of animation frame callbacks.
+        // Step 3 Remove callbacks[handle].
+        let _ = self.frame_callback_list.borrow_mut().swap_remove(&ident);
+    }
 }
