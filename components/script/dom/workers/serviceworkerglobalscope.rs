@@ -214,6 +214,11 @@ impl WorkerEventLoopMethods for ServiceWorkerGlobalScope {
     fn control_receiver(&self) -> &Receiver<ServiceWorkerControlMsg> {
         &self.control_receiver
     }
+
+    fn maybe_update_the_rendering(&self) {
+        // Since ServiceWorkerGlobalScope doesn't implement
+        // the AnimationFrameProvider interface do nothing
+    }
 }
 
 impl ServiceWorkerGlobalScope {

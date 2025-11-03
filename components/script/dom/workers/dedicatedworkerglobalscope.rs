@@ -32,11 +32,13 @@ use style::thread_state::{self, ThreadState};
 use crate::devtools;
 use crate::dom::abstractworker::{MessageData, SimpleWorkerErrorHandler, WorkerScriptMsg};
 use crate::dom::abstractworkerglobalscope::{WorkerEventLoopMethods, run_worker_event_loop};
+use crate::dom::bindings::callback::ExceptionHandling;
 use crate::dom::bindings::cell::DomRefCell;
 use crate::dom::bindings::codegen::Bindings::AnimationFrameProviderBinding::FrameRequestCallback;
 use crate::dom::bindings::codegen::Bindings::DedicatedWorkerGlobalScopeBinding;
 use crate::dom::bindings::codegen::Bindings::DedicatedWorkerGlobalScopeBinding::DedicatedWorkerGlobalScopeMethods;
 use crate::dom::bindings::codegen::Bindings::MessagePortBinding::StructuredSerializeOptions;
+use crate::dom::bindings::codegen::Bindings::PerformanceBinding::PerformanceMethods;
 use crate::dom::bindings::codegen::Bindings::WorkerBinding::WorkerType;
 use crate::dom::bindings::error::{ErrorInfo, ErrorResult};
 use crate::dom::bindings::inheritance::Castable;
@@ -248,6 +250,10 @@ impl WorkerEventLoopMethods for DedicatedWorkerGlobalScope {
 
     fn control_receiver(&self) -> &Receiver<DedicatedWorkerControlMsg> {
         &self.control_receiver
+    }
+
+    fn maybe_update_the_rendering(&self) {
+        self.run_the_animation_frame_callbacks(CanGc::note());
     }
 }
 
@@ -742,6 +748,25 @@ impl DedicatedWorkerGlobalScope {
                 TaskSourceName::DOMManipulation,
             ))
             .expect("Sending to parent failed");
+    }
+
+    /// <https://html.spec.whatwg.org/multipage/#run-the-animation-frame-callbacks>
+    pub(crate) fn run_the_animation_frame_callbacks(&self, can_gc: CanGc) {
+        let now = self.global().performance().Now();
+
+        // Let callbackHandles be the result of getting the keys of callbacks.
+        let callback_handles: Vec<_> = self.frame_callback_list.borrow().keys().cloned().collect();
+
+        // Let callbacks be target's map of animation frame callbacks.
+        let mut callbacks = self.frame_callback_list.borrow_mut();
+
+        // For each handle in callbackHandles, if handle exists in callbacks:
+        for handle in callback_handles.iter() {
+            if let Some(callback) = callbacks.swap_remove(handle) {
+                // Invoke callback with « now » and "report".
+                let _ = callback.Call__(now, ExceptionHandling::Report, can_gc);
+            }
+        }
     }
 }
 

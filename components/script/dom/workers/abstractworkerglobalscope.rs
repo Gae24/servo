@@ -31,6 +31,7 @@ pub(crate) trait WorkerEventLoopMethods {
     fn from_devtools_msg(msg: DevtoolScriptControlMsg) -> Self::Event;
     fn from_timer_msg() -> Self::Event;
     fn control_receiver(&self) -> &Receiver<Self::ControlMsg>;
+    fn maybe_update_the_rendering(&self);
 }
 
 // https://html.spec.whatwg.org/multipage/#worker-event-loop
@@ -95,6 +96,7 @@ pub(crate) fn run_worker_event_loop<T, WorkerMsg, Event>(
             None => None,
         };
         scope.perform_a_microtask_checkpoint(can_gc);
+        worker_scope.maybe_update_the_rendering();
     }
     worker_scope
         .upcast::<GlobalScope>()
