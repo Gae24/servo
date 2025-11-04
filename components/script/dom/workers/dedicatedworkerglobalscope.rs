@@ -752,19 +752,23 @@ impl DedicatedWorkerGlobalScope {
 
     /// <https://html.spec.whatwg.org/multipage/#run-the-animation-frame-callbacks>
     pub(crate) fn run_the_animation_frame_callbacks(&self, can_gc: CanGc) {
+        warn!("running animation frame callbacks");
         let now = self.global().performance().Now();
 
         // Let callbackHandles be the result of getting the keys of callbacks.
         let callback_handles: Vec<_> = self.frame_callback_list.borrow().keys().cloned().collect();
 
         // Let callbacks be target's map of animation frame callbacks.
-        let mut callbacks = self.frame_callback_list.borrow_mut();
 
         // For each handle in callbackHandles, if handle exists in callbacks:
         for handle in callback_handles.iter() {
-            if let Some(callback) = callbacks.swap_remove(handle) {
+            let maybe_callback = self.frame_callback_list.borrow_mut().swap_remove(handle);
+            if let Some(callback) = maybe_callback {
+                warn!("Invoking callback with handle {}", handle);
                 // Invoke callback with « now » and "report".
                 let _ = callback.Call__(now, ExceptionHandling::Report, can_gc);
+            } else {
+                warn!("Handle {} not associated with a callback", handle);
             }
         }
     }
@@ -838,6 +842,7 @@ impl DedicatedWorkerGlobalScopeMethods<crate::DomTypeHolder> for DedicatedWorker
         self.frame_callback_identifier
             .update(|identifier| identifier + 1);
         let handle = self.frame_callback_identifier.get();
+        warn!("Queued callback with ident {}", handle);
 
         // Step 4 Let callbacks be target's map of animation frame callbacks.
         // Step 5 Set callbacks[handle] to callback.

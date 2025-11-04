@@ -98,6 +98,7 @@ pub(crate) fn run_worker_event_loop<T, WorkerMsg, Event>(
         scope.perform_a_microtask_checkpoint(can_gc);
         worker_scope.maybe_update_the_rendering();
     }
+    worker_scope.maybe_update_the_rendering();
     worker_scope
         .upcast::<GlobalScope>()
         .perform_a_dom_garbage_collection_checkpoint();
