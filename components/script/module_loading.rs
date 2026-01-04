@@ -8,11 +8,14 @@ use std::cell::{Cell, RefCell};
 use std::ffi::CStr;
 use std::rc::Rc;
 
+use indexmap::IndexMap;
 use js::conversions::jsstr_to_string;
 use js::jsapi::{
     GetModuleRequestSpecifier, GetRequestedModuleSpecifier, GetRequestedModulesCount, Handle,
     HandleObject, HandleValue, Heap, JSObject,
 };
+use js::jsval::JSVal;
+use js::rust::HandleObject as RustHandleObject;
 use net_traits::http_status::HttpStatus;
 use net_traits::request::{Destination, Referrer, RequestBuilder, RequestId, RequestMode};
 use net_traits::{FetchMetadata, Metadata, NetworkError, ResourceFetchTiming};
@@ -21,6 +24,7 @@ use script_bindings::str::DOMString;
 use servo_url::ServoUrl;
 
 use crate::document_loader::LoadType;
+use crate::dom::bindings::cell::DomRefCell;
 use crate::dom::bindings::refcounted::Trusted;
 use crate::dom::bindings::root::DomRoot;
 use crate::dom::csp::{GlobalCspReporting, Violation};
@@ -35,13 +39,26 @@ use crate::script_module::{
 };
 use crate::script_runtime::{CanGc, IntroductionType};
 
-#[derive(PartialEq)]
+#[derive(PartialEq, Debug)]
 struct ModuleObject(Box<Heap<*mut JSObject>>);
 
 impl ModuleObject {
     pub(crate) fn handle(&self) -> HandleObject {
         unsafe { self.0.handle().into() }
     }
+}
+
+unsafe fn private_module_data_from_reference(
+    reference_private: &Handle<JSVal>,
+) -> Option<&PrivateModuleData> {
+    if reference_private.get().is_undefined() {
+        return None;
+    }
+    unsafe { (reference_private.get().to_private() as *const PrivateModuleData).as_ref() }
+}
+
+struct PrivateModuleData {
+    loaded_modules: DomRefCell<IndexMap<String, ModuleObject>>,
 }
 
 /// <https://tc39.es/ecma262/#graphloadingstate-record>
@@ -162,20 +179,42 @@ fn ContinueModuleLoading(state: &GraphLoadingState) {
 }
 
 /// <https://tc39.es/ecma262/#sec-FinishLoadingImportedModule>
-fn FinishLoadingImportedModule(result: Result<(), ()>) {
+/// We should use a map whose keys are module requests, for now we use module request's specifier
+fn FinishLoadingImportedModule(
+    referrer: HandleValue,
+    module_request_specifier: String,
+    payload: GraphLoadingState,
+    result: Result<ModuleObject, ()>,
+) {
     // Step 1. If result is a normal completion, then
-    if let Ok(_) = result {
-        // a. If referrer.[[LoadedModules]] contains a LoadedModuleRequest Record record such that ModuleRequestsEqual(record, moduleRequest) is true, then
-        // i. Assert: record.[[Module]] and result.[[Value]] are the same Module Record.
-        // b. Else,
-        // i. Append the LoadedModuleRequest Record { [[Specifier]]: moduleRequest.[[Specifier]], [[Attributes]]: moduleRequest.[[Attributes]], [[Module]]: result.[[Value]] } to referrer.[[LoadedModules]].
+    if let Ok(module) = result {
+        if let Some(private_data) = unsafe { private_module_data_from_reference(&referrer) } {
+            // a. If referrer.[[LoadedModules]] contains a LoadedModuleRequest Record record such that
+            // ModuleRequestsEqual(record, moduleRequest) is true, then
+            if let Some(record) = private_data
+                .loaded_modules
+                .borrow()
+                .get(&module_request_specifier)
+            {
+                // i. Assert: record.[[Module]] and result.[[Value]] are the same Module Record.
+                assert_eq!(record.handle(), module.handle());
+            } else {
+                // b. Else,
+                // i. Append the LoadedModuleRequest Record { [[Specifier]]: moduleRequest.[[Specifier]],
+                // [[Attributes]]: moduleRequest.[[Attributes]], [[Module]]: result.[[Value]] } to referrer.[[LoadedModules]].
+                private_data
+                    .loaded_modules
+                    .borrow_mut()
+                    .insert(module_request_specifier, module);
+            }
+        }
     }
+
     // Step 2. If payload is a GraphLoadingState Record, then
-
     // a. Perform ContinueModuleLoading(payload, result).
+    ContinueModuleLoading(payload);
 
-    // Step 3. Else,
-
+    // TODO Step 3. Else,
     // a. Perform ContinueDynamicImport(payload, result).
 
     // 4. Return unused.
@@ -213,7 +252,7 @@ fn HostLoadImportedModule(referrer: HandleValue, module_request: Handle<*mut JSO
 
     let specifier = unsafe {
         let jsstr = std::ptr::NonNull::new(GetModuleRequestSpecifier(*cx, module_request)).unwrap();
-        DOMString::from_string(jsstr_to_string(*cx, jsstr))
+        jsstr_to_string(*cx, jsstr)
     };
 
     // Step 8 Let url be the result of resolving a module specifier given referencingScript and moduleRequest.[[Specifier]],
@@ -221,7 +260,7 @@ fn HostLoadImportedModule(referrer: HandleValue, module_request: Handle<*mut JSO
     let url = ModuleTree::resolve_module_specifier(
         &global_scope,
         referencing_script,
-        specifier,
+        DOMString::from_string(specifier),
         CanGc::note(),
     );
 
