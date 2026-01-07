@@ -3988,6 +3988,7 @@ fn evaluate_script(
             // the executing context of script might be different
             // from the dynamic import script's executing context.
             None,
+            false,
         ));
 
         unsafe {
