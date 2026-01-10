@@ -7,6 +7,7 @@
 
 use std::collections::{HashMap, HashSet};
 use std::ffi::CStr;
+use std::fmt::Debug;
 use std::rc::Rc;
 use std::str::FromStr;
 use std::{mem, ptr};
@@ -76,7 +77,7 @@ use crate::dom::types::Console;
 use crate::dom::window::Window;
 use crate::dom::worker::TrustedWorkerAddress;
 use crate::fetch::RequestWithGlobalScope;
-use crate::module_loading::{self, LoadRequestedModules};
+use crate::module_loading::LoadRequestedModules;
 use crate::network_listener::{
     self, FetchResponseListener, NetworkListener, ResourceTimingListener,
 };
@@ -93,6 +94,18 @@ pub(crate) fn gen_type_error(global: &GlobalScope, string: String, can_gc: CanGc
 
 #[derive(JSTraceable)]
 pub(crate) struct ModuleObject(RootedTraceableBox<Heap<*mut JSObject>>);
+
+impl PartialEq for ModuleObject {
+    fn eq(&self, other: &Self) -> bool {
+        std::ptr::eq(self.0.get(), other.0.get())
+    }
+}
+
+impl Debug for ModuleObject {
+    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> Result<(), std::fmt::Error> {
+        "ModuleObject(...)".fmt(fmt)
+    }
+}
 
 impl ModuleObject {
     pub(crate) fn new(obj: RustHandleObject) -> ModuleObject {
@@ -132,13 +145,11 @@ impl Clone for RethrowError {
     }
 }
 
-// FIXME
-#[cfg_attr(crown, allow(crown::unrooted_must_root))]
 pub(crate) struct ModuleScript {
     pub(crate) base_url: ServoUrl,
     pub(crate) options: ScriptFetchOptions,
     owner: Option<ModuleOwner>,
-    pub(crate) loaded_modules: DomRefCell<IndexMap<String, module_loading::ModuleObject>>,
+    pub(crate) loaded_modules: DomRefCell<IndexMap<String, ModuleObject>>,
     is_inline: bool,
 }
 
