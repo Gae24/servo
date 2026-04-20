@@ -9,14 +9,13 @@ use std::rc::Rc;
 
 use content_security_policy::sandboxing_directive::SandboxingFlagSet;
 use js::context::JSContext;
-use js::gc::HandleValue;
-use js::jsapi::{ExceptionStackBehavior, Heap, JSScript, SetScriptPrivate};
+use js::jsapi::{ExceptionStackBehavior, Heap, JSScript, ModuleErrorBehaviour, SetScriptPrivate};
 use js::jsval::{PrivateValue, UndefinedValue};
 use js::panic::maybe_resume_unwind;
-use js::realm::CurrentRealm;
+use js::realm::AutoRealm;
 use js::rust::wrappers2::{
     Compile1, JS_ClearPendingException, JS_ExecuteScript, JS_GetScriptPrivate,
-    JS_IsExceptionPending, JS_SetPendingException,
+    JS_IsExceptionPending, JS_SetPendingException, ModuleEvaluate, ThrowOnModuleEvaluationFailure,
 };
 use js::rust::{
     CompileOptionsWrapper, HandleValue, MutableHandleValue, transform_str_to_source_text,
@@ -30,12 +29,11 @@ use crate::DomTypeHolder;
 use crate::dom::bindings::codegen::Bindings::WindowBinding::WindowMethods;
 use crate::dom::bindings::error::{Error, ErrorInfo, ErrorResult, report_pending_exception};
 use crate::dom::bindings::inheritance::Castable;
+use crate::dom::bindings::reflector::DomObject;
 use crate::dom::bindings::str::DOMString;
 use crate::dom::globalscope::GlobalScope;
-use crate::dom::promise::Promise;
-use crate::dom::promisenativehandler::{Callback, PromiseNativeHandler};
 use crate::dom::window::Window;
-use crate::realms::{AlreadyInRealm, enter_auto_realm};
+use crate::realms::enter_auto_realm;
 use crate::script_module::{
     ModuleScript, ModuleSource, ModuleTree, RethrowError, ScriptFetchOptions,
 };
@@ -257,6 +255,7 @@ impl GlobalScope {
     }
 
     /// <https://html.spec.whatwg.org/multipage/#run-a-module-script>
+    #[expect(unsafe_code)]
     pub(crate) fn run_a_module_script(&self, cx: &mut JSContext, module_tree: Rc<ModuleTree>) {
         // Step 1. Let settings be the settings object of script.
         // NOTE(pylbrecht): "settings" is `self` here.
@@ -270,31 +269,23 @@ impl GlobalScope {
         // Step 3. Record module script execution start time given script.
         // TODO
 
+        let mut realm = AutoRealm::new(
+            cx,
+            NonNull::new(self.reflector().get_jsobject().get()).unwrap(),
+        );
+        let cx = &mut realm.current_realm();
+
         // Step 4. Prepare to run script given settings.
         run_a_script::<DomTypeHolder, _, _>(cx, self, |cx| {
-
-            let safe_cx = GlobalScope::get_cx();
             // Step 6. If script's error to rethrow is not null, then set evaluationPromise to a
             // promise rejected with script's error to rethrow.
             {
                 let module_error = module_tree.get_rethrow_error().borrow();
                 if let Some(error) = &*module_error {
-                    //module_tree.report_error(self, CanGc::from_cx(cx));
-                    let evaluation_promise =
-                        Promise::new_rejected(self, safe_cx, error.handle(), CanGc::from_cx(cx));
-                    let handler = PromiseNativeHandler::new(
-                        self,
-                        None,
-                        Some(Box::new(ReportErrorRejectionHandler)),
-                        CanGc::from_cx(cx),
-                    );
-                    let realm = AlreadyInRealm::assert_for_cx(safe_cx);
-                    evaluation_promise.append_native_handler(
-                        &handler,
-                        (&realm).into(),
-                        CanGc::from_cx(cx),
-                    );
-                    return;
+                    unsafe {
+                        JS_SetPendingException(cx, error.handle(), ExceptionStackBehavior::Capture);
+                    }
+                    return report_pending_exception(cx);
                 }
             }
 
@@ -302,34 +293,29 @@ impl GlobalScope {
             let record = module_tree.get_record().map(|record| record.handle());
 
             if let Some(record) = record {
-                // Step 7.2. Set evaluationPromise to record.Evaluate().
-                rooted!(&in(cx) let mut rval = UndefinedValue());
-                let _evaluated = module_tree.execute_module(cx, self, record, rval.handle_mut());
+                unsafe {
+                    // Step 7.2. Set evaluationPromise to record.Evaluate().
+                    rooted!(&in(cx) let mut rval = UndefinedValue());
+                    let ok = ModuleEvaluate(cx, record, rval.handle_mut());
+                    assert!(ok, "module evaluation failed");
 
-                // Step 8. If preventErrorReporting is false, then upon rejection of evaluationPromise
-                // with reason, report an exception given by reason for script's settings object's
-                // global object.
-                //if evaluated.is_err() {
-                assert!(rval.is_object());
-                rooted!(&in(cx) let evaluation_promise_obj = rval.to_object());
-                let evaluation_promise =
-                    Promise::new_with_js_promise(evaluation_promise_obj.handle(), safe_cx);
-                let handler = PromiseNativeHandler::new(
-                    self,
-                    None,
-                    Some(Box::new(ReportErrorRejectionHandler)),
-                    CanGc::from_cx(cx),
-                );
-                let realm = AlreadyInRealm::assert_for_cx(safe_cx);
-                evaluation_promise.append_native_handler(
-                    &handler,
-                    (&realm).into(),
-                    CanGc::from_cx(cx),
-                );
+                    if !rval.is_object() {
+                        return report_pending_exception(cx);
+                    }
 
-                //module_tree.set_rethrow_error(exception);
-                //module_tree.report_error(self, CanGc::from_cx(cx));
-                //}
+                    rooted!(&in(cx) let evaluation_promise = rval.to_object());
+
+                    // Step 8. If preventErrorReporting is false, then upon rejection of
+                    // evaluationPromise with reason, report an exception given by reason for
+                    // script's settings object's global object.
+                    if !ThrowOnModuleEvaluationFailure(
+                        cx,
+                        evaluation_promise.handle(),
+                        ModuleErrorBehaviour::ReportModuleErrorsAsync,
+                    ) {
+                        return report_pending_exception(cx);
+                    }
+                }
             }
         });
     }
@@ -424,19 +410,4 @@ pub(crate) fn evaluate_script(
     }
 
     unsafe { JS_ExecuteScript(cx, record.handle(), rval) }
-}
-
-#[derive(Clone, JSTraceable, MallocSizeOf)]
-struct ReportErrorRejectionHandler;
-
-impl Callback for ReportErrorRejectionHandler {
-    #[expect(unsafe_code)]
-    fn callback(&self, realm: &mut CurrentRealm, v: HandleValue) {
-        let cx = GlobalScope::get_cx();
-        unsafe {
-            JS_SetPendingException(*cx, v, ExceptionStackBehavior::Capture);
-        }
-        let in_realm = AlreadyInRealm::from(&mut *realm);
-        report_pending_exception(cx, (&in_realm).into(), CanGc::from_cx(&mut *realm));
-    }
 }

@@ -23,17 +23,16 @@ use js::gc::{HandleObject, MutableHandleValue};
 use js::jsapi::{
     CallArgs, ExceptionStackBehavior, GetFunctionNativeReserved, GetModuleResolveHook,
     Handle as RawHandle, HandleValue as RawHandleValue, Heap, JS_GetFunctionObject,
-    JSContext as RawJSContext, JSObject, JSPROP_ENUMERATE, JSRuntime, ModuleErrorBehaviour,
-    ModuleType, SetFunctionNativeReserved, SetModuleDynamicImportHook, SetModuleMetadataHook,
-    SetModulePrivate, SetModuleResolveHook, SetScriptPrivateReferenceHooks, Value,
+    JSContext as RawJSContext, JSObject, JSPROP_ENUMERATE, JSRuntime, ModuleType,
+    SetFunctionNativeReserved, SetModuleDynamicImportHook, SetModuleMetadataHook, SetModulePrivate,
+    SetModuleResolveHook, SetScriptPrivateReferenceHooks, Value,
 };
 use js::jsval::{JSVal, PrivateValue, UndefinedValue};
 use js::realm::{AutoRealm, CurrentRealm};
 use js::rust::wrappers2::{
     CompileJsonModule1, CompileModule1, DefineFunctionWithReserved, GetModuleRequestSpecifier,
     GetModuleRequestType, JS_ClearPendingException, JS_DefineProperty4, JS_GetPendingException,
-    JS_NewStringCopyN, JS_SetPendingException, ModuleEvaluate, ModuleLink,
-    ThrowOnModuleEvaluationFailure,
+    JS_NewStringCopyN, JS_SetPendingException, ModuleLink,
 };
 use js::rust::{Handle, HandleValue, ToString, transform_str_to_source_text};
 use mime::Mime;
@@ -432,69 +431,6 @@ impl ModuleTree {
         // Step 7. Return script.
         module
     }
-
-    /// Execute the provided module, storing the evaluation return value in the provided
-    /// mutable handle.
-    #[expect(unsafe_code)]
-    pub(crate) fn execute_module(
-        &self,
-        cx: &mut JSContext,
-        global: &GlobalScope,
-        module_record: HandleObject,
-        mut eval_result: MutableHandleValue,
-    ) -> Result<(), ()> {
-        let mut realm = AutoRealm::new(
-            cx,
-            NonNull::new(global.reflector().get_jsobject().get()).unwrap(),
-        );
-        let cx = &mut *realm;
-
-        unsafe {
-            let ok = ModuleEvaluate(cx, module_record, eval_result.reborrow());
-            assert!(ok, "module evaluation failed");
-
-            rooted!(&in(cx) let mut evaluation_promise = ptr::null_mut::<JSObject>());
-            if eval_result.is_object() {
-                evaluation_promise.set(eval_result.to_object());
-            }
-
-            let throw_result = ThrowOnModuleEvaluationFailure(
-                cx,
-                evaluation_promise.handle(),
-                ModuleErrorBehaviour::ReportModuleErrorsAsync,
-            );
-            if !throw_result {
-                warn!("fail to evaluate module");
-
-                /*rooted!(in(*cx) let mut exception = UndefinedValue());
-                    assert!(JS_GetPendingException(*cx, exception.handle_mut()));
-                    JS_ClearPendingException(*cx);
-
-                    Err(RethrowError(RootedTraceableBox::from_box(Heap::boxed(
-                        exception.get(),
-                ))))*/
-                Err(())
-            } else {
-                debug!("module evaluated successfully");
-                Ok(())
-            }
-        }
-    }
-
-    /*#[expect(unsafe_code)]
-    pub(crate) fn report_error(&self, global: &GlobalScope, can_gc: CanGc) {
-        let module_error = self.rethrow_error.borrow();
-
-        if let Some(exception) = &*module_error {
-            let mut realm = enter_auto_realm(cx, global);
-            let cx = &mut realm.current_realm();
-
-            unsafe {
-                JS_SetPendingException(cx, exception.handle(), ExceptionStackBehavior::Capture);
-            }
-            report_pending_exception(cx);
-        }
-    }*/
 
     /// <https://html.spec.whatwg.org/multipage/#resolve-a-module-specifier>
     pub(crate) fn resolve_module_specifier(
