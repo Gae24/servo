@@ -57,7 +57,9 @@ use servo_url::{ImmutableOrigin, ServoUrl};
 
 use crate::DomTypeHolder;
 use crate::dom::bindings::conversions::SafeToJSValConvertible;
-use crate::dom::bindings::error::{Error, ErrorToJsval, throw_dom_exception};
+use crate::dom::bindings::error::{
+    Error, ErrorToJsval, report_pending_exception, throw_dom_exception,
+};
 use crate::dom::bindings::inheritance::Castable;
 use crate::dom::bindings::refcounted::{Trusted, TrustedPromise};
 use crate::dom::bindings::root::DomRoot;
@@ -1471,102 +1473,103 @@ pub(crate) fn fetch_a_single_module_script(
     let mut realm = enter_auto_realm(cx, global);
     let cx = &mut realm.current_realm();
 
+    let has_pending_fetch = pending.borrow().is_some();
+
+    let promise = Promise::new_in_realm(cx);
+
     run_a_callback::<DomTypeHolder, _>(global, || {
-        let has_pending_fetch = pending.borrow().is_some();
-
-        let promise = Promise::new_in_realm(cx);
-
-        // Step 5. If moduleMap[(url, moduleType)] is "fetching", wait in parallel until that entry's value changes,
-        // then queue a task on the networking task source to proceed with running the following steps.
-        if has_pending_fetch {
-            promise.append_native_handler(cx, &handler);
-
-            // Append an handler to the existing pending fetch, once resolved it will queue a task
-            // to run onComplete.
-            let continue_loading_handler = PromiseNativeHandler::new(
-                cx,
-                global,
-                Some(Box::new(QueueTaskHandler { promise })),
-                None,
-            );
-
-            // be careful of a borrow hazard here (do not hold a RefCell over a possible GC pause)
-            let pending_promise = pending.borrow_mut().take();
-            if let Some(promise) = pending_promise {
-                promise.append_native_handler(cx, &continue_loading_handler);
-                let _ = pending.borrow_mut().insert(promise);
-            }
-            return;
-        }
-
         promise.append_native_handler(cx, &handler);
 
-        let prev = pending.borrow_mut().replace(promise);
-        assert!(prev.is_none());
+        // be careful of a borrow hazard here (do not hold a RefCell over a possible GC pause)
+        let pending_promise = pending.borrow_mut().take();
 
-        // Step 7. Set moduleMap[(url, moduleType)] to "fetching".
-        global.set_module_map(module_request.clone(), ModuleStatus::Fetching(pending));
+        match pending_promise {
+            // Step 5. If moduleMap[(url, moduleType)] is "fetching", wait in parallel until that
+            // entry's value changes, then queue a task on the networking task source to proceed
+            // with running the following steps.
+            Some(fetching_promise) => {
+                // Append an handler to the existing pending fetch, once resolved it will queue a
+                // task to run onComplete.
+                let continue_loading_handler = PromiseNativeHandler::new(
+                    cx,
+                    global,
+                    Some(Box::new(QueueTaskHandler { promise })),
+                    None,
+                );
 
-        // We only need a policy container when fetching the root of a module worker.
-        let policy_container = (is_top_level && global.is::<WorkerGlobalScope>())
-            .then(|| fetch_client.policy_container.clone());
-
-        let webview_id = global.webview_id();
-
-        // Step 8. Let request be a new request whose URL is url, mode is "cors", referrer is referrer, and client is fetchClient.
-
-        // Step 10. If destination is "worker", "sharedworker", or "serviceworker", and isTopLevel is true,
-        // then set request's mode to "same-origin".
-        let mode = match destination {
-            Destination::Worker | Destination::SharedWorker if is_top_level => {
-                RequestMode::SameOrigin
+                fetching_promise.append_native_handler(cx, &continue_loading_handler);
+                let _ = pending.borrow_mut().insert(fetching_promise);
             },
-            _ => RequestMode::CorsMode,
-        };
+            None => {
+                let _ = pending.borrow_mut().insert(promise);
+            },
+        }
+    });
 
-        // Step 9. Set request's destination to the result of running the
-        // fetch destination from module type steps given destination and moduleType.
-        let destination = match module_type {
-            ModuleType::JSON => Destination::Json,
-            ModuleType::JavaScript | ModuleType::Unknown => destination,
-        };
+    if has_pending_fetch {
+        return;
+    }
 
-        // TODO Step 11. Set request's initiator type to "script".
+    // Step 7. Set moduleMap[(url, moduleType)] to "fetching".
+    global.set_module_map(module_request.clone(), ModuleStatus::Fetching(pending));
 
-        // Step 12. Set up the module script request given request and options.
-        let request = RequestBuilder::new(
-            webview_id,
-            ensure_blob_referenced_by_url_is_kept_alive(global, url.clone()),
-            referrer,
-        )
-        .destination(destination)
-        .parser_metadata(options.parser_metadata)
-        .integrity_metadata(options.integrity_metadata.clone())
-        .credentials_mode(options.credentials_mode)
-        .referrer_policy(options.referrer_policy)
-        .mode(mode)
-        .cryptographic_nonce_metadata(options.cryptographic_nonce.clone())
-        .insecure_requests_policy(fetch_client.insecure_requests_policy)
-        .has_trustworthy_ancestor_origin(fetch_client.has_trustworthy_ancestor_origin)
-        .policy_container(fetch_client.policy_container)
-        .client(fetch_client.client)
-        .pipeline_id(Some(fetch_client.pipeline_id))
-        .origin(fetch_client.origin);
+    // We only need a policy container when fetching the root of a module worker.
+    let policy_container = (is_top_level && global.is::<WorkerGlobalScope>())
+        .then(|| fetch_client.policy_container.clone());
 
-        let context = ModuleContext {
-            owner: Trusted::new(global),
-            data: vec![],
-            metadata: None,
-            module_request,
-            options,
-            status: Ok(()),
-            introduction_type,
-            policy_container,
-        };
+    let webview_id = global.webview_id();
 
-        let task_source = global.task_manager().networking_task_source().to_sendable();
-        global.fetch(request, context, task_source);
-    })
+    // Step 8. Let request be a new request whose URL is url, mode is "cors", referrer is referrer, and client is fetchClient.
+
+    // Step 10. If destination is "worker", "sharedworker", or "serviceworker", and isTopLevel is true,
+    // then set request's mode to "same-origin".
+    let mode = match destination {
+        Destination::Worker | Destination::SharedWorker if is_top_level => RequestMode::SameOrigin,
+        _ => RequestMode::CorsMode,
+    };
+
+    // Step 9. Set request's destination to the result of running the
+    // fetch destination from module type steps given destination and moduleType.
+    let destination = match module_type {
+        ModuleType::JSON => Destination::Json,
+        ModuleType::JavaScript | ModuleType::Unknown => destination,
+    };
+
+    // TODO Step 11. Set request's initiator type to "script".
+
+    // Step 12. Set up the module script request given request and options.
+    let request = RequestBuilder::new(
+        webview_id,
+        ensure_blob_referenced_by_url_is_kept_alive(global, url.clone()),
+        referrer,
+    )
+    .destination(destination)
+    .parser_metadata(options.parser_metadata)
+    .integrity_metadata(options.integrity_metadata.clone())
+    .credentials_mode(options.credentials_mode)
+    .referrer_policy(options.referrer_policy)
+    .mode(mode)
+    .cryptographic_nonce_metadata(options.cryptographic_nonce.clone())
+    .insecure_requests_policy(fetch_client.insecure_requests_policy)
+    .has_trustworthy_ancestor_origin(fetch_client.has_trustworthy_ancestor_origin)
+    .policy_container(fetch_client.policy_container)
+    .client(fetch_client.client)
+    .pipeline_id(Some(fetch_client.pipeline_id))
+    .origin(fetch_client.origin);
+
+    let context = ModuleContext {
+        owner: Trusted::new(global),
+        data: vec![],
+        metadata: None,
+        module_request,
+        options,
+        status: Ok(()),
+        introduction_type,
+        policy_container,
+    };
+
+    let task_source = global.task_manager().networking_task_source().to_sendable();
+    global.fetch(request, context, task_source);
 }
 
 pub(crate) type ModuleSpecifierMap = IndexMap<String, Option<ServoUrl>>;
