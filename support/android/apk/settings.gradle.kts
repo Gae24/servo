@@ -18,11 +18,11 @@ dependencyResolutionManagement {
 
 include(":servoapp")
 
-val userPropertiesFile = File("user.properties")
-if (userPropertiesFile.exists()) {
-    println("Loading user.properties")
+val localPropertiesFile = File("local.properties")
+if (localPropertiesFile.exists()) {
+    println("Loading local.properties")
     val props = Properties()
-    userPropertiesFile.inputStream().use {
+    localPropertiesFile.inputStream().use {
         props.load(it)
     }
     props.forEach { (key, value) ->
