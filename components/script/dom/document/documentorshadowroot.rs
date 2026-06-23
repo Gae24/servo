@@ -11,7 +11,6 @@ use js::context::JSContext;
 use layout_api::HitTestFlags;
 use script_bindings::codegen::GenericBindings::DocumentBinding::DocumentMethods;
 use script_bindings::codegen::GenericBindings::ShadowRootBinding::ShadowRootMethods;
-use script_bindings::codegen::GenericBindings::WindowBinding::WindowMethods;
 use script_bindings::error::{Error, ErrorResult};
 use servo_arc::Arc;
 use servo_config::pref;
@@ -129,11 +128,7 @@ impl DocumentOrShadowRoot {
 
     /// Retarget the result of `elementsFromPoint` or `elementFromPoint` according to the
     /// resolution in <https://github.com/w3c/csswg-drafts/issues/556>.
-    pub(crate) fn retarget_hit_test_result(
-        &self,
-        this: &Node,
-        node: &Node,
-    ) -> Option<DomRoot<Element>> {
+    fn retarget_hit_test_result(this: &Node, node: &Node) -> Option<DomRoot<Element>> {
         let retargeted_node =
             DomRoot::downcast::<Node>(node.upcast::<EventTarget>().retarget(this.upcast()))?;
         DomRoot::downcast::<Element>(retargeted_node.clone()).or_else(|| {
@@ -187,7 +182,7 @@ impl DocumentOrShadowRoot {
         let address = UntrustedNodeAddress(result.node.0 as *const c_void);
         let node = unsafe { node::from_untrusted_node_address(address) };
 
-        self.retarget_hit_test_result(this, &node)
+        Self::retarget_hit_test_result(this, &node)
     }
 
     /// <https://drafts.csswg.org/cssom-view/#dom-document-elementsfrompoint>
@@ -232,7 +227,7 @@ impl DocumentOrShadowRoot {
                 // layout has run and any OpaqueNodes that no longer refer to real nodes are gone.
                 let address = UntrustedNodeAddress(result.node.0 as *const c_void);
                 let node = unsafe { node::from_untrusted_node_address(address) };
-                self.retarget_hit_test_result(this, &node)
+                Self::retarget_hit_test_result(this, &node)
             })
             .collect();
 
@@ -260,9 +255,8 @@ impl DocumentOrShadowRoot {
     }
 
     /// <https://html.spec.whatwg.org/multipage/#dom-documentorshadowroot-activeelement-dev>
-    pub(crate) fn active_element(&self, this: &Node) -> Option<DomRoot<Element>> {
+    pub(crate) fn active_element(document: &Document, this: &Node) -> Option<DomRoot<Element>> {
         // Step 1. Let candidate be this's node document's focused area's DOM anchor.
-        let document = self.window.Document();
         let candidate = document
             .focus_handler()
             .focused_area()
