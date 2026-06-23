@@ -781,6 +781,9 @@ pub(crate) struct Document {
     /// <https://html.spec.whatwg.org/multipage/#mute-iframe-load>
     mute_iframe_load: Cell<bool>,
 
+    /// <https://dom.spec.whatwg.org/#document-custom-element-registry>
+    custom_element_registry: MutNullableDom<CustomElementRegistry>,
+
     /// The mechanism by which time-outs and intervals are scheduled.
     /// <https://html.spec.whatwg.org/multipage/#timers>
     timers: OneshotTimers,
@@ -3273,12 +3276,20 @@ impl Document {
     }
 
     pub(crate) fn custom_element_registry(&self) -> Option<DomRoot<CustomElementRegistry>> {
-        self.document_or_shadow_root.custom_element_registry()
+        self.custom_element_registry.get()
     }
 
     pub(crate) fn set_custom_element_registry(&self, registry: &CustomElementRegistry) {
-        self.document_or_shadow_root
-            .set_custom_element_registry(Some(registry));
+        self.custom_element_registry.set(Some(registry));
+    }
+
+    pub(crate) fn get_or_init_custom_element_registry(
+        &self,
+        cx: &mut JSContext,
+        window: &Window,
+    ) -> DomRoot<CustomElementRegistry> {
+        self.custom_element_registry
+            .or_init(|| CustomElementRegistry::new(cx, window))
     }
 
     /// <https://dom.spec.whatwg.org/#effective-global-custom-element-registry>
@@ -3300,7 +3311,7 @@ impl Document {
     /// Cleans up any active promises
     /// <https://github.com/servo/servo/issues/15318>
     pub(crate) fn teardown_custom_element_registry(&self) {
-        if let Some(custom_elements) = self.custom_element_registry() {
+        if let Some(custom_elements) = self.custom_element_registry.get() {
             custom_elements.teardown();
         }
     }
@@ -4510,6 +4521,7 @@ impl Document {
             accessibility_data: Default::default(),
             iframe_load_in_progress: Default::default(),
             mute_iframe_load: Default::default(),
+            custom_element_registry: Default::default(),
             timers: OneshotTimers::new(window.upcast()),
             pipeline_id,
             task_manager: Rc::new(TaskManager::new(
@@ -5960,7 +5972,7 @@ impl DocumentMethods<crate::DomTypeHolder> for Document {
 
     /// <https://dom.spec.whatwg.org/#dom-documentorshadowroot-customelementregistry>
     fn GetCustomElementRegistry(&self) -> Option<DomRoot<CustomElementRegistry>> {
-        self.custom_element_registry()
+        self.custom_element_registry.get()
     }
 
     /// <https://html.spec.whatwg.org/multipage/#dom-document-hasfocus>
@@ -6413,7 +6425,8 @@ impl DocumentMethods<crate::DomTypeHolder> for Document {
                 // this's custom element registry, then throw a "NotSupportedError" DOMException.
                 if registry.as_ref().is_some_and(|registry| {
                     let this_registry = self
-                        .custom_element_registry()
+                        .custom_element_registry
+                        .get()
                         .expect("Document must have a custom element registry");
 
                     !registry.is_scoped() && *registry != this_registry

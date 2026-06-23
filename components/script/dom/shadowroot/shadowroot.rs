@@ -112,6 +112,9 @@ pub(crate) struct ShadowRoot {
     adopted_stylesheets: DomRefCell<Vec<Dom<CSSStyleSheet>>>,
 
     details_name_groups: DomRefCell<Option<DetailsNameGroups>>,
+
+    /// <https://dom.spec.whatwg.org/#shadowroot-custom-element-registry>
+    custom_element_registry: MutNullableDom<CustomElementRegistry>,
 }
 
 impl ShadowRoot {
@@ -150,6 +153,7 @@ impl ShadowRoot {
             delegates_focus: Cell::new(false),
             adopted_stylesheets: Default::default(),
             details_name_groups: Default::default(),
+            custom_element_registry: Default::default(),
         }
     }
 
@@ -367,12 +371,11 @@ impl ShadowRoot {
     }
 
     pub(crate) fn custom_element_registry(&self) -> Option<DomRoot<CustomElementRegistry>> {
-        self.document_or_shadow_root.custom_element_registry()
+        self.custom_element_registry.get()
     }
 
     pub(crate) fn set_custom_element_registry(&self, registry: Option<&CustomElementRegistry>) {
-        self.document_or_shadow_root
-            .set_custom_element_registry(registry);
+        self.custom_element_registry.set(registry);
     }
 }
 
@@ -384,7 +387,7 @@ impl ShadowRootMethods<crate::DomTypeHolder> for ShadowRoot {
 
     /// <https://dom.spec.whatwg.org/#dom-documentorshadowroot-customelementregistry>
     fn GetCustomElementRegistry(&self) -> Option<DomRoot<CustomElementRegistry>> {
-        self.custom_element_registry()
+        self.custom_element_registry.get()
     }
 
     /// <https://drafts.csswg.org/cssom-view/#dom-document-elementfrompoint>
