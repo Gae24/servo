@@ -5197,7 +5197,7 @@ impl DocumentMethods<crate::DomTypeHolder> for Document {
 
     /// <https://html.spec.whatwg.org/multipage/#dom-document-activeelement>
     fn GetActiveElement(&self) -> Option<DomRoot<Element>> {
-        self.document_or_shadow_root.active_element(self.upcast())
+        DocumentOrShadowRoot::active_element(self, self.upcast())
     }
 
     /// <https://dom.spec.whatwg.org/#dom-documentorshadowroot-customelementregistry>
