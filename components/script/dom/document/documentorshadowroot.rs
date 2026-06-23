@@ -113,19 +113,9 @@ impl ::style::stylesheets::StylesheetInDocument for ServoStylesheetInDocument {
 }
 
 // https://w3c.github.io/webcomponents/spec/shadow/#extensions-to-the-documentorshadowroot-mixin
-#[cfg_attr(crown, crown::unrooted_must_root_lint::must_root)]
-#[derive(JSTraceable, MallocSizeOf)]
-pub(crate) struct DocumentOrShadowRoot {
-    window: Dom<Window>,
-}
+pub(crate) struct DocumentOrShadowRoot {}
 
 impl DocumentOrShadowRoot {
-    pub(crate) fn new(window: &Window) -> Self {
-        Self {
-            window: Dom::from_ref(window),
-        }
-    }
-
     /// Retarget the result of `elementsFromPoint` or `elementFromPoint` according to the
     /// resolution in <https://github.com/w3c/csswg-drafts/issues/556>.
     fn retarget_hit_test_result(this: &Node, node: &Node) -> Option<DomRoot<Element>> {
@@ -149,8 +139,8 @@ impl DocumentOrShadowRoot {
     /// <https://drafts.csswg.org/cssom-view/#dom-document-elementfrompoint>
     #[expect(unsafe_code)]
     pub(crate) fn element_from_point(
-        &self,
         cx: &mut JSContext,
+        window: &Window,
         this: &Node,
         x: Finite<f64>,
         y: Finite<f64>,
@@ -159,7 +149,7 @@ impl DocumentOrShadowRoot {
     ) -> Option<DomRoot<Element>> {
         let x = *x as f32;
         let y = *y as f32;
-        let viewport = self.window.viewport_details().size;
+        let viewport = window.viewport_details().size;
 
         if !has_browsing_context {
             return None;
@@ -170,9 +160,7 @@ impl DocumentOrShadowRoot {
         }
 
         let flags = HitTestFlags::empty();
-        let result = self
-            .window
-            .elements_from_point_query(cx, flags, LayoutPoint::new(x, y));
+        let result = window.elements_from_point_query(cx, flags, LayoutPoint::new(x, y));
         let Some(result) = result.items.first() else {
             return document_element;
         };
@@ -188,8 +176,8 @@ impl DocumentOrShadowRoot {
     /// <https://drafts.csswg.org/cssom-view/#dom-document-elementsfrompoint>
     #[expect(unsafe_code)]
     pub(crate) fn elements_from_point(
-        &self,
         cx: &mut JSContext,
+        window: &Window,
         this: &Node,
         x: Finite<f64>,
         y: Finite<f64>,
@@ -198,7 +186,7 @@ impl DocumentOrShadowRoot {
     ) -> Vec<DomRoot<Element>> {
         let x = *x as f32;
         let y = *y as f32;
-        let viewport = self.window.viewport_details().size;
+        let viewport = window.viewport_details().size;
 
         if !has_browsing_context {
             return vec![];
@@ -215,9 +203,7 @@ impl DocumentOrShadowRoot {
         // would be overlapping it, when applying the transforms that apply to the
         // descendants of the viewport, append the associated element to sequence.
         let flags = HitTestFlags::empty();
-        let result = self
-            .window
-            .elements_from_point_query(cx, flags, LayoutPoint::new(x, y));
+        let result = window.elements_from_point_query(cx, flags, LayoutPoint::new(x, y));
 
         let mut elements: Vec<_> = result
             .items

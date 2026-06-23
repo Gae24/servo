@@ -445,7 +445,6 @@ pub(crate) struct NavigationTiming {
 #[dom_struct]
 pub(crate) struct Document {
     node: Node,
-    document_or_shadow_root: DocumentOrShadowRoot,
     window: Dom<Window>,
     implementation: MutNullableDom<DOMImplementation>,
     #[no_trace]
@@ -4391,7 +4390,6 @@ impl Document {
 
         Document {
             node: Node::new_document_node(),
-            document_or_shadow_root: DocumentOrShadowRoot::new(window),
             window: Dom::from_ref(window),
             has_browsing_context,
             implementation: Default::default(),
@@ -7170,8 +7168,9 @@ impl DocumentMethods<crate::DomTypeHolder> for Document {
         x: Finite<f64>,
         y: Finite<f64>,
     ) -> Option<DomRoot<Element>> {
-        self.document_or_shadow_root.element_from_point(
+        DocumentOrShadowRoot::element_from_point(
             cx,
+            &self.window,
             self.upcast(),
             x,
             y,
@@ -7187,8 +7186,9 @@ impl DocumentMethods<crate::DomTypeHolder> for Document {
         x: Finite<f64>,
         y: Finite<f64>,
     ) -> Vec<DomRoot<Element>> {
-        self.document_or_shadow_root.elements_from_point(
+        DocumentOrShadowRoot::elements_from_point(
             cx,
+            &self.window,
             self.upcast(),
             x,
             y,
