@@ -75,7 +75,6 @@ pub(crate) enum IsUserAgentWidget {
 pub(crate) struct ShadowRoot {
     /// The [`DocumentFragment`] that this [`ShadowRoot`] inherits from.
     document_fragment: DocumentFragment,
-    document_or_shadow_root: DocumentOrShadowRoot,
     document: Dom<Document>,
     /// List of author styles associated with nodes in this shadow tree.
     #[custom_trace]
@@ -142,7 +141,6 @@ impl ShadowRoot {
 
         ShadowRoot {
             document_fragment,
-            document_or_shadow_root: DocumentOrShadowRoot::new(document.window()),
             document: Dom::from_ref(document),
             author_styles: DomRefCell::new(AuthorStyles::new()),
             stylesheet_list: MutNullableDom::new(None),
@@ -402,7 +400,8 @@ impl ShadowRootMethods<crate::DomTypeHolder> for ShadowRoot {
     fn ElementFromPoint(&self, x: Finite<f64>, y: Finite<f64>) -> Option<DomRoot<Element>> {
         // Return the result of running the retargeting algorithm with context object
         // and the original result as input.
-        match self.document_or_shadow_root.element_from_point(
+        match DocumentOrShadowRoot::element_from_point(
+            &self.document.window(),
             self.upcast(),
             x,
             y,
@@ -422,16 +421,15 @@ impl ShadowRootMethods<crate::DomTypeHolder> for ShadowRoot {
         // Return the result of running the retargeting algorithm with context object
         // and the original result as input
         let mut elements = Vec::new();
-        for e in self
-            .document_or_shadow_root
-            .elements_from_point(
-                self.upcast(),
-                x,
-                y,
-                None,
-                self.document.has_browsing_context(),
-            )
-            .iter()
+        for e in DocumentOrShadowRoot::elements_from_point(
+            &self.document.window(),
+            self.upcast(),
+            x,
+            y,
+            None,
+            self.document.has_browsing_context(),
+        )
+        .iter()
         {
             let retargeted_node = e.upcast::<EventTarget>().retarget(self.upcast());
             if let Some(element) = retargeted_node.downcast::<Element>().map(DomRoot::from_ref) {

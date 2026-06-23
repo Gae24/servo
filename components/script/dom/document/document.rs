@@ -371,7 +371,6 @@ pub(crate) struct NavigationTiming {
 #[dom_struct]
 pub(crate) struct Document {
     node: Node,
-    document_or_shadow_root: DocumentOrShadowRoot,
     window: Dom<Window>,
     implementation: MutNullableDom<DOMImplementation>,
     #[ignore_malloc_size_of = "type from external crate"]
@@ -3754,7 +3753,6 @@ impl Document {
 
         Document {
             node: Node::new_document_node(),
-            document_or_shadow_root: DocumentOrShadowRoot::new(window),
             window: Dom::from_ref(window),
             has_browsing_context,
             implementation: Default::default(),
@@ -6311,7 +6309,8 @@ impl DocumentMethods<crate::DomTypeHolder> for Document {
 
     /// <https://drafts.csswg.org/cssom-view/#dom-document-elementfrompoint>
     fn ElementFromPoint(&self, x: Finite<f64>, y: Finite<f64>) -> Option<DomRoot<Element>> {
-        self.document_or_shadow_root.element_from_point(
+        DocumentOrShadowRoot::element_from_point(
+            &self.window,
             self.upcast(),
             x,
             y,
@@ -6322,7 +6321,8 @@ impl DocumentMethods<crate::DomTypeHolder> for Document {
 
     /// <https://drafts.csswg.org/cssom-view/#dom-document-elementsfrompoint>
     fn ElementsFromPoint(&self, x: Finite<f64>, y: Finite<f64>) -> Vec<DomRoot<Element>> {
-        self.document_or_shadow_root.elements_from_point(
+        DocumentOrShadowRoot::elements_from_point(
+            &self.window,
             self.upcast(),
             x,
             y,
