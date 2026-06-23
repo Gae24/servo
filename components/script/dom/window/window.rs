@@ -1434,16 +1434,11 @@ impl WindowMethods<crate::DomTypeHolder> for Window {
     fn CustomElements(&self, cx: &mut JSContext) -> DomRoot<CustomElementRegistry> {
         // Step 1: Assert: this's associated Document's custom element registry is
         // a CustomElementRegistry object.
-        let document = self.Document();
-        if let Some(registry) = document.custom_element_registry() {
-            return registry;
-        }
         // A Window's associated Document is always created with
         // a new CustomElementRegistry object.
-        let registry = CustomElementRegistry::new(cx, self);
-        document.set_custom_element_registry(&registry);
         // Step 2: Return this's associated Document's custom element registry.
-        registry
+        self.Document()
+            .get_or_init_custom_element_registry(cx, self)
     }
 
     /// <https://html.spec.whatwg.org/multipage/#dom-location>
