@@ -316,7 +316,7 @@ unsafe extern "C" fn promise_rejection_tracker(
                         atom!("rejectionhandled"),
                         EventBubbles::DoesNotBubble,
                         EventCancelable::Cancelable,
-                        &root_promise,
+                        root_promise.promise_obj(),
                         reason.handle(),
                     );
 
@@ -483,6 +483,7 @@ pub(crate) fn notify_about_rejected_promises(cx: &mut JSContext, global: &Global
     global.task_manager().dom_manipulation_task_source().queue(
         task!(unhandled_rejection_event: move |cx| {
             let target = target.root();
+            let global = target.global();
 
             // Step 4.1 For each promise p of list:
             for promise in uncaught_rejections {
@@ -503,11 +504,11 @@ pub(crate) fn notify_about_rejected_promises(cx: &mut JSContext, global: &Global
 
                 let event = PromiseRejectionEvent::new(
                     cx,
-                    &target.global(),
+                    &global,
                     atom!("unhandledrejection"),
                     EventBubbles::DoesNotBubble,
                     EventCancelable::Cancelable,
-                    &promise,
+                    promise.promise_obj(),
                     reason.handle(),
                 );
                 let not_canceled = event.upcast::<Event>().fire(cx, &target);
@@ -515,7 +516,6 @@ pub(crate) fn notify_about_rejected_promises(cx: &mut JSContext, global: &Global
                 // Step 4.1.3 If notCanceled is true, then the user agent may report
                 // p.[[PromiseResult]] to a developer console.
                 if not_canceled {
-                    let global = target.global();
                     let reason_string = run_a_script::<DomTypeHolder, _, _>(
                         cx,
                         &global,

@@ -20,7 +20,6 @@ use crate::dom::bindings::root::{AsHandleValue, DomRoot};
 use crate::dom::bindings::str::DOMString;
 use crate::dom::event::{Event, EventBubbles, EventCancelable};
 use crate::dom::globalscope::GlobalScope;
-use crate::dom::promise::Promise;
 
 #[dom_struct]
 pub(crate) struct PromiseRejectionEvent {
@@ -46,18 +45,11 @@ impl PromiseRejectionEvent {
         type_: Atom,
         bubbles: EventBubbles,
         cancelable: EventCancelable,
-        promise: &Promise,
+        promise: HandleObject,
         reason: HandleValue,
     ) -> DomRoot<Self> {
         Self::new_with_proto(
-            cx,
-            global,
-            None,
-            type_,
-            bubbles,
-            cancelable,
-            promise.promise_obj(),
-            reason,
+            cx, global, None, type_, bubbles, cancelable, promise, reason,
         )
     }
 
