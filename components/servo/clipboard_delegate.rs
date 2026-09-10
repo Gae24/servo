@@ -195,10 +195,117 @@ mod clipboard {
     }
 }
 
-#[cfg(any(
-    not(feature = "clipboard"),
-    all(feature = "clipboard", target_os = "android")
-))]
+#[cfg(all(feature = "clipboard", target_env = "android"))]
+mod clipboard {
+    use jni::errors::{Error, ThrowRuntimeExAndDefault};
+    use jni::objects::{Global, JClass, JObject, JString, JValue, JValueOwned};
+    use jni::strings::JNIStr;
+    use jni::sys::{jboolean, jfloat, jint, jobject};
+    use jni::{Env, EnvUnowned, JavaVM, jni_sig, jni_str};
+
+    use super::StringRequest;
+    use crate::clipboard_delegate::fallback_clipboard;
+
+    fn with_clipboard_access<F, T>(callback: F) -> Result<T, Error>
+    where
+        F: FnOnce(&mut Env, JObject) -> Result<T, Error>,
+    {
+        let ctx = ndk_context::android_context();
+
+        let jvm = unsafe { JavaVM::from_raw(ctx.vm().cast()) };
+
+        jvm.attach_current_thread(|env| {
+            let context = unsafe { JObject::from_raw(env, ctx.context().cast()) };
+            let clipboard = env.new_string("clipboard")?;
+
+            let clipboard_manager = env
+                .call_method(
+                    context,
+                    jni_str!("getSystemService"),
+                    jni_sig!("(Ljava/lang/String;)Ljava/lang/Object;"),
+                    &[(&clipboard).into()],
+                )?
+                .l()?;
+
+            callback(env, clipboard_manager)
+        })
+    }
+
+    pub(super) fn clear() {
+        let result = with_clipboard_access(|env, clipboard_manager| {
+            env.call_method(
+                clipboard_manager,
+                jni_str!("clearPrimaryClip"),
+                jni_sig!("()V"),
+                &[],
+            )
+        });
+        if let Err(error) = result {
+            log::warn!(
+                "OHOS pasteboard clear failed ({error}); using in-memory fallback_clipboard"
+            );
+            fallback_clipboard::clear();
+        }
+    }
+
+    pub(super) fn get_text(request: StringRequest) {
+        with_clipboard_access(|env, clipboard_manager| {
+            if !env
+                .call_method(
+                    &clipboard_manager,
+                    jni_str!("hasPrimaryClip"),
+                    jni_sig!("()Z"),
+                    &[],
+                )?
+                .z()?
+            {
+                return request.success(String::new());
+            }
+
+            let clip = env
+                .call_method(
+                    clipboard_manager,
+                    jni_str!("getPrimaryClip"),
+                    jni_sig!("()Landroid/content/ClipData;"),
+                    &[],
+                )?
+                .l()?;
+
+            if env
+                .call_method(&clip, jni_str!("getItemCount"), jni_sig!("()I"), &[])?
+                .i()? ==
+                0
+            {
+                return request.success(String::new());
+            }
+
+            let item = env
+                .call_method(
+                    &clip,
+                    jni_str!("getItemAt"),
+                    jni_sig!("(I)Landroid/content/ClipData$Item;"),
+                    &[0.into()],
+                )?
+                .l()?;
+
+            let char_sequence = env
+                .call_method(
+                    item,
+                    jni_str!("getText"),
+                    jni_sig!("()Ljava/lang/CharSequence;"),
+                    &[],
+                )?
+                .l()?;
+            let text = env.cast_local::<JString>(char_sequence)?.to_string();
+
+            return request.success(text);
+        });
+    }
+
+    pub(super) fn set_text(new_contents: String) {}
+}
+
+#[cfg(not(feature = "clipboard"))]
 mod clipboard {
     use super::StringRequest;
     use crate::clipboard_delegate::fallback_clipboard;
