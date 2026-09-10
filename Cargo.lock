@@ -7964,6 +7964,7 @@ dependencies = [
  "image",
  "ipc-channel",
  "itertools 0.15.0",
+ "jni",
  "keyboard-types",
  "log",
  "mozangle",
