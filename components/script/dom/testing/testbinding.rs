@@ -642,6 +642,7 @@ impl TestBindingMethods<crate::DomTypeHolder> for TestBinding {
             nonRequiredNullable2: Some(None),
             noCallbackImport: None,
             noCallbackImport2: None,
+            promiseValue: None,
         })
     }
 
