@@ -1141,8 +1141,9 @@ def getJSToNativeConversionInfo(type: IDLType, descriptorProvider: DescriptorPro
         raise TypeError("Can't handle SpiderMonkey interface arguments other than typed arrays yet")
 
     if type.isDOMString():
-        nullBehavior = getConversionConfigForType(type, isEnforceRange, isClamp, treatNullAs)
+        needsToBeTraced = isMember == "Dictionary"
 
+        nullBehavior = getConversionConfigForType(type, isEnforceRange, isClamp, treatNullAs)
         conversionCode = fromJSValTemplate(nullBehavior, failOrPropagate, exceptionCode)
 
         if defaultValue is None:
@@ -1156,11 +1157,18 @@ def getJSToNativeConversionInfo(type: IDLType, descriptorProvider: DescriptorPro
             if type.nullable():
                 default = f"Some({default})"
 
-        declType = "DOMString"
+        if needsToBeTraced:
+            declType = "TracedDOMString"
+        else:
+            declType = "DOMString"
+
         if type.nullable():
             declType = f"Option<{declType}>"
 
-        return handleOptional(conversionCode, CGGeneric(declType), default)
+        stackType = CGGeneric("DOMString")
+        modifier = ".traced()"
+
+        return handleOptional(conversionCode, CGGeneric(declType), default, stackType, modifier)
 
     if type.isUSVString():
         assert not isEnforceRange and not isClamp
@@ -3122,7 +3130,7 @@ def DomTypes(descriptors: list[Descriptor],
     elements += [CGGeneric("}\n")]
     imports = [
         CGGeneric("use crate::root::DomRoot;\n"),
-        CGGeneric("use crate::domstring::DOMString;\n"),
+        CGGeneric("use crate::domstring::{DOMString, TracedDOMString};\n"),
     ]
     return CGList(imports + elements)
 
@@ -8414,7 +8422,7 @@ def type_needs_tracing(t: IDLObject, isMember: Optional[str] = None) -> bool:
         if is_typed_array(t):
             return True
 
-        if t.isCallback() or t.isPromise():
+        if t.isCallback() or t.isPromise() or t.isDOMString():
             return isMember == "Dictionary"
 
         return False
