@@ -1254,7 +1254,7 @@ def getJSToNativeConversionInfo(type: IDLType, descriptorProvider: DescriptorPro
         stackType = CGTemplatedType("RootedCallback", declType)
         modifier = ".to_traced()"
 
-        conversion = CGCallbackTempRoot(declType.define(), needTraced)
+        conversion = CGCallbackTempRoot(declType.define())
 
         if type.nullable():
             declType = CGTemplatedType("Option", declType)
@@ -2918,7 +2918,7 @@ class CGGeneric(CGThing):
 
 
 class CGCallbackTempRoot(CGGeneric):
-    def __init__(self, name: str, needTraced: bool) -> None:
+    def __init__(self, name: str) -> None:
         inner = f"unsafe {{ {name.replace('<D>', '::<D>')}::new(cx, ${{val}}.get().to_object()) }}"
         CGGeneric.__init__(self, inner)
 
