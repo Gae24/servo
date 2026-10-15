@@ -902,12 +902,9 @@ def getJSToNativeConversionInfo(type: IDLType, descriptorProvider: DescriptorPro
         return templateBody
 
     # A helper function for types that implement FromJSValConvertible trait
-    def fromJSValTemplate(config: str, errorHandler: str, exceptionCode: str, type_name: str = "FromJSValConvertible",
-                          needsToBeTraced: bool = False) -> str:
-        returnValue = "value.to_traced()" if needsToBeTraced else "value"
-
-        return f"""match {type_name}::from_jsval(cx, ${{val}}, {config}) {{
-    Ok(ConversionResult::Success(value)) => {returnValue},
+    def fromJSValTemplate(config: str, errorHandler: str, exceptionCode: str) -> str:
+        return f"""match FromJSValConvertible::from_jsval(cx, ${{val}}, {config}) {{
+    Ok(ConversionResult::Success(value)) => value,
     Ok(ConversionResult::Failure(error)) => {{
         {errorHandler}
     }}
