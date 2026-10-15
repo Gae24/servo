@@ -7787,7 +7787,7 @@ impl{self.generic} Clone for {self.makeClassName(self.dictionary)}{self.genericS
         def memberInit(memberInfo: tuple[IDLArgument, JSToNativeConversionInfo]) -> CGThing:
             member, _ = memberInfo
             name = self.makeMemberName(member.identifier.name)
-            conversion = self.getMemberConversion(memberInfo, member.type)
+            conversion = self.getMemberConversion(memberInfo)
             return CGGeneric(f"{name}: {conversion.define()},\n")
 
         def varInsert(varName: str, dictionaryName: str) -> CGThing:
@@ -7895,7 +7895,7 @@ impl{self.generic} Clone for {self.makeClassName(self.dictionary)}{self.genericS
             declType = CGWrapper(info.declType, pre="Option<", post=">")
         return declType.define()
 
-    def getMemberConversion(self, memberInfo: tuple[IDLArgument, JSToNativeConversionInfo], memberType: IDLType) -> CGThing:
+    def getMemberConversion(self, memberInfo: tuple[IDLArgument, JSToNativeConversionInfo]) -> CGThing:
         def indent(s: str) -> str:
             return CGIndenter(CGGeneric(s), 12).define()
 
