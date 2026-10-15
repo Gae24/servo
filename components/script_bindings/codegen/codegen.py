@@ -735,7 +735,12 @@ class JSToNativeConversionInfo():
     """
     An object representing information about a JS-to-native conversion.
     """
-    def __init__(self, template: str | CGThing, default: str | None = None, declType: CGThing | None = None) -> None:
+    def __init__(self,
+                 template: str | CGThing,
+                 default: str | None = None,
+                 declType: CGThing | None = None,
+                 stackType: CGThing | None = None,
+                 modifier: str | None = None) -> None:
         """
         template: A string representing the conversion code.  This will have
                   template substitution performed on it as follows:
@@ -747,12 +752,18 @@ class JSToNativeConversionInfo():
         declType: A CGThing representing the native C++ type we're converting
                   to.  This is allowed to be None if the conversion code is
                   supposed to be used as-is.
+
+        stackType: If declType is a traced type this is it's variant that can live on the stack.
+
+        modifier: A string with the function call to convert stackType to declType
         """
         assert isinstance(template, str)
         assert declType is None or isinstance(declType, CGThing)
         self.template = template
         self.default = default
         self.declType = declType
+        self.stackType = stackType
+        self.modifier = modifier
 
 
 def getJSToNativeConversionInfo(type: IDLType, descriptorProvider: DescriptorProvider, failureCode: str | None = None,
@@ -829,9 +840,13 @@ def getJSToNativeConversionInfo(type: IDLType, descriptorProvider: DescriptorPro
     else:
         failOrPropagate = failureCode
 
-    def handleOptional(template: str, declType: CGThing | None, default: str | None) -> JSToNativeConversionInfo:
+    def handleOptional(template: str,
+                       declType: CGThing | None,
+                       default: str | None,
+                       stackType: CGThing | None = None,
+                       modifier: str | None = None) -> JSToNativeConversionInfo:
         assert (defaultValue is None) == (default is None)
-        return JSToNativeConversionInfo(template, default, declType)
+        return JSToNativeConversionInfo(template, default, declType, stackType, modifier)
 
     # Helper functions for dealing with failures due to the JS value being the
     # wrong type of value.
@@ -998,7 +1013,7 @@ def getJSToNativeConversionInfo(type: IDLType, descriptorProvider: DescriptorPro
         #    our own implementation code.
 
         needsToBeTraced = isMember == "Dictionary"
-        templateBody = fromJSValTemplate("()", failOrPropagate, exceptionCode, "<<D::Promise as PromiseHelpers<D>>::StackRoot>", needsToBeTraced)
+        templateBody = fromJSValTemplate("()", failOrPropagate, exceptionCode)
 
         if isArgument:
             declType = CGGeneric("&D::Promise")
@@ -1006,7 +1021,11 @@ def getJSToNativeConversionInfo(type: IDLType, descriptorProvider: DescriptorPro
             declType = CGGeneric("<D::Promise as PromiseHelpers<D>>::HeapTraced")
         else:
             declType = CGGeneric("<D::Promise as PromiseHelpers<D>>::StackRoot")
-        return handleOptional(templateBody, declType, handleDefault("None"))
+
+        stackType = CGGeneric("<D::Promise as PromiseHelpers<D>>::StackRoot")
+        modifier = ".to_traced()"
+
+        return handleOptional(templateBody, declType, handleDefault("None"), stackType, modifier)
 
     if type.isGeckoInterface():
         assert not isEnforceRange and not isClamp
@@ -1232,6 +1251,9 @@ def getJSToNativeConversionInfo(type: IDLType, descriptorProvider: DescriptorPro
             typeName = "RootedCallback"
         finalDeclType = CGTemplatedType(typeName, declType)
 
+        stackType = CGTemplatedType("RootedCallback", declType)
+        modifier = ".to_traced()"
+
         conversion = CGCallbackTempRoot(declType.define(), needTraced)
 
         if type.nullable():
@@ -1265,7 +1287,7 @@ def getJSToNativeConversionInfo(type: IDLType, descriptorProvider: DescriptorPro
         else:
             default = None
 
-        return JSToNativeConversionInfo(template, default, finalDeclType)
+        return JSToNativeConversionInfo(template, default, finalDeclType, stackType, modifier)
 
     if type.isAny():
         assert not isEnforceRange and not isClamp
@@ -2897,8 +2919,7 @@ class CGGeneric(CGThing):
 
 class CGCallbackTempRoot(CGGeneric):
     def __init__(self, name: str, needTraced: bool) -> None:
-        extra = ".to_traced()" if needTraced else ""
-        inner = f"unsafe {{ {name.replace('<D>', '::<D>')}::new(cx, ${{val}}.get().to_object()) }}{extra}"
+        inner = f"unsafe {{ {name.replace('<D>', '::<D>')}::new(cx, ${{val}}.get().to_object()) }}"
         CGGeneric.__init__(self, inner)
 
 
@@ -7905,6 +7926,10 @@ impl{self.generic} Clone for {self.makeClassName(self.dictionary)}{self.genericS
         replacements = {"val": "rval.handle()"}
         conversion = string.Template(templateBody).substitute(replacements)
 
+        memberTypeConversion = "value"
+        if info.modifier is not None:
+            memberTypeConversion += info.modifier
+
         assert (member.defaultValue is None) == (default is None)
         if not member.optional:
             assert default is None
@@ -7913,16 +7938,28 @@ impl{self.generic} Clone for {self.makeClassName(self.dictionary)}{self.genericS
         elif not default:
             default = "None"
             conversion = f"Some({conversion})"
+            if info.modifier is not None:
+                memberTypeConversion = f"value.map(|val| val{info.modifier})"
+
+        assert info.declType is not None
+        declType = info.declType
+
+        if info.stackType is not None:
+            declType = info.stackType
+
+        if member.optional and not member.defaultValue:
+            declType = CGWrapper(declType, pre="Option<", post=">")
 
         conversion = (
             "{\n"
             "    rooted!(&in(cx) let mut rval = UndefinedValue());\n"
-            f'    if get_dictionary_property(cx, object.handle(), c"{member.identifier.name}", '
+            f'    let value: {declType.define()} = if get_dictionary_property(cx, object.handle(), c"{member.identifier.name}", '
             "rval.handle_mut())? && !rval.is_undefined() {\n"
             f"{indent(conversion)}\n"
             "    } else {\n"
             f"{indent(default)}\n"
-            "    }\n"
+            "    };\n"
+            f"    {memberTypeConversion}\n"
             "}")
 
         return CGGeneric(conversion)
