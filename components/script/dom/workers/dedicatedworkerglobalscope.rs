@@ -55,7 +55,7 @@ use crate::dom::bindings::reflector::DomGlobal;
 use crate::dom::bindings::root::DomRoot;
 use crate::dom::bindings::str::DOMString;
 use crate::dom::bindings::structuredclone;
-use crate::dom::bindings::trace::{CustomTraceable, RootedTraceableBox};
+use crate::dom::bindings::trace::CustomTraceable;
 use crate::dom::csp::Violation;
 use crate::dom::errorevent::ErrorEvent;
 use crate::dom::event::{Event, EventBubbles, EventCancelable};
@@ -1168,7 +1168,7 @@ impl DedicatedWorkerGlobalScopeMethods<crate::DomTypeHolder> for DedicatedWorker
             options
                 .transfer
                 .iter()
-                .map(|js: &RootedTraceableBox<Heap<*mut JSObject>>| js.get())
+                .map(|js: &Box<Heap<*mut JSObject>>| js.get())
                 .collect::<Vec<_>>());
         self.post_message_impl(cx, message, guard)
     }

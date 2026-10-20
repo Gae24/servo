@@ -30,7 +30,6 @@ use crate::dom::bindings::inheritance::Castable;
 use crate::dom::bindings::reflector::DomGlobal;
 use crate::dom::bindings::root::DomRoot;
 use crate::dom::bindings::structuredclone;
-use crate::dom::bindings::trace::RootedTraceableBox;
 use crate::dom::bindings::transferable::Transferable;
 use crate::dom::bindings::utils::set_dictionary_property;
 use crate::dom::eventtarget::EventTarget;
@@ -323,7 +322,7 @@ impl MessagePortMethods<crate::DomTypeHolder> for MessagePort {
             options
                 .transfer
                 .iter()
-                .map(|js: &RootedTraceableBox<Heap<*mut JSObject>>| js.get())
+                .map(|js: &Box<Heap<*mut JSObject>>| js.get())
                 .collect::<Vec<_>>());
         self.post_message_impl(cx, message, guard)
     }

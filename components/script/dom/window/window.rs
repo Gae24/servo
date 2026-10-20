@@ -140,9 +140,7 @@ use crate::dom::bindings::reflector::DomGlobal;
 use crate::dom::bindings::root::{Dom, DomRoot, MutNullableDom};
 use crate::dom::bindings::str::{DOMString, USVString};
 use crate::dom::bindings::structuredclone;
-use crate::dom::bindings::trace::{
-    CustomTraceable, HashMapTracedValues, JSTraceable, RootedTraceableBox,
-};
+use crate::dom::bindings::trace::{CustomTraceable, HashMapTracedValues, JSTraceable};
 use crate::dom::bindings::utils::GlobalStaticData;
 use crate::dom::bindings::weakref::DOMTracker;
 #[cfg(feature = "bluetooth")]
@@ -1895,7 +1893,7 @@ impl WindowMethods<crate::DomTypeHolder> for Window {
                 .parent
                 .transfer
                 .iter()
-                .map(|js: &RootedTraceableBox<Heap<*mut JSObject>>| js.get())
+                .map(|js: &Box<Heap<*mut JSObject>>| js.get())
                 .collect::<Vec<_>>());
 
         let incumbent = GlobalScope::incumbent().expect("no incumbent global?");

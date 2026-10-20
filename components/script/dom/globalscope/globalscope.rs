@@ -102,7 +102,7 @@ use crate::dom::bindings::root::{Dom, DomRoot, MutNullableDom};
 use crate::dom::bindings::settings_stack::{entry_global, incumbent_global};
 use crate::dom::bindings::str::DOMString;
 use crate::dom::bindings::structuredclone;
-use crate::dom::bindings::trace::{CustomTraceable, HashMapTracedValues, RootedTraceableBox};
+use crate::dom::bindings::trace::{CustomTraceable, HashMapTracedValues};
 use crate::dom::bindings::weakref::{DOMTracker, WeakRef};
 use crate::dom::blob::Blob;
 use crate::dom::dedicatedworkerglobalscope::{
@@ -3004,7 +3004,7 @@ impl GlobalScope {
             options
                 .transfer
                 .iter()
-                .map(|js: &RootedTraceableBox<Heap<*mut JSObject>>| js.get())
+                .map(|js: &Box<Heap<*mut JSObject>>| js.get())
                 .collect::<Vec<_>>());
 
         let data = structuredclone::write(cx, value, Some(guard))?;
