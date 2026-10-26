@@ -8059,8 +8059,6 @@ impl{self.generic} Clone for {self.makeClassName(self.dictionary)}{self.genericS
             typeName = f"{self.makeModuleName(d.parent)}::{self.makeClassName(d.parent)}"
             _, parentSuffix = genericsForType(d.parent)
             typeName += parentSuffix
-            if self.parentNeedsToBeTraced:
-                typeName = f"Box<{typeName}>"
             inheritance = f"    pub parent: {typeName},\n"
         else:
             inheritance = ""
@@ -8123,7 +8121,7 @@ impl{self.generic} Clone for {self.makeClassName(self.dictionary)}{self.genericS
         d = self.dictionary
         if d.parent:
             assert isinstance(d.parent, IDLDictionary)
-            modifier = ".into_box()" if self.parentNeedsToBeTraced else ""
+            modifier = ".into_inner()" if self.parentNeedsToBeTraced else ""
             initParent = (
                 "{\n"
                 f"    match {self.makeModuleName(d.parent)}::{self.makeClassName(d.parent)}::new(cx, val)? {{\n"
@@ -8299,7 +8297,7 @@ impl{self.generic} Clone for {self.makeClassName(self.dictionary)}{self.genericS
         if self.hasRequiredFields(self.dictionary):
             return ""
 
-        modifier = ".into_box()" if self.parentNeedsToBeTraced else ""
+        modifier = ".into_inner()" if self.parentNeedsToBeTraced else ""
 
         parentTemplate = f"parent: %s::%s::empty(){modifier},\n"
         fieldTemplate = "%s: %s,\n"
@@ -8371,7 +8369,8 @@ def getTracingConversion(type: IDLType, resolvedType: str) -> tuple[str, str | N
         return (resolvedType.replace("RootedCallback", "TracedCallback"), ".to_traced()")
 
     elif type.isDictionary() and type_needs_tracing(type):
-        return (resolvedType.replace("RootedTraceableBox", "Box"), ".into_box()")
+        unwrapped = resolvedType.replace("RootedTraceableBox<", "").removesuffix(">")
+        return (unwrapped, ".into_inner()")
 
     elif type.isSequence():
         tracedType, conversionCode = getTracingConversion(innerContainerType(type), resolvedType)
