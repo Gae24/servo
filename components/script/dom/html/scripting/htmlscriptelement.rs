@@ -1066,8 +1066,8 @@ impl HTMLScriptElement {
                 document.set_current_script(old_script.as_deref());
             },
             Script::Module(module_tree) => {
-                // TODO Step 6."module".1. Assert: document's currentScript attribute is null.
-                document.set_current_script(None);
+                // Step 6."module".1. Assert: document's currentScript attribute is null.
+                assert!(document.GetCurrentScript().is_none());
 
                 // Step 6."module".2. Run the module script given by el's result.
                 self.owner_global().run_a_module_script(cx, module_tree);
